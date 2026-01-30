@@ -21,7 +21,7 @@ $skill-installer propel-gtm/propel-code-skills
 
 ## Cursor
 
-Cursor supports Agent Skills defined in `SKILL.md` files.citeturn19view0
+Cursor supports Agent Skills defined in `SKILL.md` files.
 
 Project-scoped install (recommended):
 
@@ -38,4 +38,4 @@ cp -R /path/to/propel-code-skills/plugins/propel-code-review/skills/agent-code-r
 ```
 
 Notes:
-- Cursor projects use `.cursor/skills/<skill-name>/SKILL.md` and Cursor also looks in `~/.cursor/skills` for global skills.citeturn16view1turn16view0
+- Cursor projects use `.cursor/skills/<skill-name>/SKILL.md` and Cursor also looks in `~/.cursor/skills` for global skills.
