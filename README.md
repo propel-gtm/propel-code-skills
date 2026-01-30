@@ -19,6 +19,21 @@ Run these commands in Claude:
 $skill-installer propel-gtm/propel-code-skills
 ```
 
+## PROPEL_API_KEY
+
+Set `PROPEL_API_KEY` in your environment before running the skill. Obtain the key from [Company Settings](https://app.propelcode.ai/administration/settings) in the Propel web app.
+
+```
+export PROPEL_API_KEY="your_key_here"
+```
+
+To make it persistent in bash, add the export line to your bash profile and reload:
+
+```
+echo 'export PROPEL_API_KEY="your_key_here"' >> ~/.bash_profile
+source ~/.bash_profile
+```
+
 ## Cursor
 
 Cursor supports Agent Skills defined in `SKILL.md` files.
