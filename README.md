@@ -4,9 +4,7 @@ This repo ships the Propel code review skill at:
 
 `plugins/propel-code-review/skills/propel-code-review`
 
-## Prerequisites
-
-## PROPEL_API_KEY
+## Prerequisite
 
 Set `PROPEL_API_KEY` in your environment before running the skill. Obtain the key from [Company Settings](https://app.propelcode.ai/administration/settings) in the Propel web app.
 
@@ -36,14 +34,6 @@ Run these commands in Claude:
 $skill-installer propel-gtm/propel-code-skills
 ```
 
-## Best practice (coding agents)
-
-Tell your agent:
-
-```
-Use `propel-code-review` to review the diff from base branch to HEAD, then report any findings before final output.
-```
-
 ## Cursor
 
 Cursor supports Agent Skills defined in `SKILL.md` files.
@@ -64,3 +54,11 @@ cp -R /path/to/propel-code-skills/plugins/propel-code-review/skills/propel-code-
 
 Notes:
 - Cursor projects use `.cursor/skills/<skill-name>/SKILL.md` and Cursor also looks in `~/.cursor/skills` for global skills.
+
+## Best practice (coding agents)
+
+Tell your agent:
+
+```
+Use `propel-code-review` to review the diff from base branch to HEAD, then report any findings before final output.
+```
