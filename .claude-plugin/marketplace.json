@@ -1,0 +1,17 @@
+{
+  "name": "propel-code-skills",
+  "description": "Skills for interacting with Propel Code review workflows and APIs.",
+  "metadata": {
+    "description": "Skills for interacting with Propel Code review workflows and APIs."
+  },
+  "owner": {
+    "name": "Propel Code"
+  },
+  "plugins": [
+    {
+      "name": "propel-code-review",
+      "source": "./plugins/propel-code-review",
+      "description": "Propel Review API skill for async diff-based code reviews"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "name": "propel-code-review",
+  "description": "Propel Review API skill for async diff-based code reviews",
+  "version": "1.0.0"
+}
