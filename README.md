@@ -2,22 +2,9 @@
 
 This repo ships the Propel code review skill at:
 
-`plugins/propel-code-review/skills/agent-code-review`
+`plugins/propel-code-review/skills/propel-code-review`
 
-## Claude (Claude Code)
-
-Run these commands in Claude:
-
-```
-/plugin marketplace add propel-gtm/propel-code-skills
-/plugin install propel-code-review@propel-code-skills
-```
-
-## Codex
-
-```
-$skill-installer propel-gtm/propel-code-skills
-```
+## Prerequisites
 
 ## PROPEL_API_KEY
 
@@ -34,6 +21,29 @@ echo 'export PROPEL_API_KEY="your_key_here"' >> ~/.bash_profile
 source ~/.bash_profile
 ```
 
+## Claude (Claude Code)
+
+Run these commands in Claude:
+
+```
+/plugin marketplace add propel-gtm/propel-code-skills
+/plugin install propel-code-review@propel-code-skills
+```
+
+## Codex
+
+```
+$skill-installer propel-gtm/propel-code-skills
+```
+
+## Best practice (coding agents)
+
+Tell your agent:
+
+```
+Use `propel-code-review` to review the diff from base branch to HEAD, then report any findings before final output.
+```
+
 ## Cursor
 
 Cursor supports Agent Skills defined in `SKILL.md` files.
@@ -42,14 +52,14 @@ Project-scoped install (recommended):
 
 ```
 mkdir -p .cursor/skills
-cp -R plugins/propel-code-review/skills/agent-code-review .cursor/skills/
+cp -R plugins/propel-code-review/skills/propel-code-review .cursor/skills/
 ```
 
 User-scoped install:
 
 ```
 mkdir -p ~/.cursor/skills
-cp -R /path/to/propel-code-skills/plugins/propel-code-review/skills/agent-code-review ~/.cursor/skills/
+cp -R /path/to/propel-code-skills/plugins/propel-code-review/skills/propel-code-review ~/.cursor/skills/
 ```
 
 Notes:

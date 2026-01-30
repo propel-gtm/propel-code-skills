@@ -1,5 +1,5 @@
 ---
-name: agent-code-review
+name: propel-code-review
 description: Use Propel Review API to run async diff-based code reviews and fetch results.
 ---
 
