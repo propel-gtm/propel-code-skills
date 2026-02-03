@@ -1,8 +1,3 @@
----
-name: propel-code-review
-description: Use Propel Review API to run async diff-based code reviews and fetch results.
----
-
 # Propel Review API Skill
 
 Use this guide to interact with the Propel Review API from an AI agent.
@@ -88,18 +83,44 @@ Response (200):
   "status": "queued|running|completed|failed",
   "comments": [
     {
+      "comment_id": "string",
       "file_path": "path",
       "line": 123,
       "message": "...",
-      "severity": "error|warning|info",
-      "suggestion": "...",
-      "rule_id": "..."
+      "severity": "error|warning|info"
     }
   ],
   "error": {
     "code": "generation_failed",
     "message": "..."
   }
+}
+```
+
+Notes:
+- `comment_id` should be present for each comment. If it is missing (older jobs), derive it as described in "Notes for Agents" below.
+
+### Post Comment Feedback
+
+`POST /v1/reviews/:review_id/comments/feedback`
+
+Request body:
+
+```json
+{
+  "comment_id": "string (required)",
+  "incorporated": true,
+  "notes": "string (optional)"
+}
+```
+
+Response (200):
+
+```json
+{
+  "review_id": "uuid",
+  "comment_id": "string",
+  "incorporated": true
 }
 ```
 
@@ -112,6 +133,9 @@ Response (200):
 3. Call `POST /v1/reviews` with the diff, repository, and base commit.
 4. Poll `GET /v1/reviews/:review_id` until status is `completed` or `failed`.
 5. Present comments to the user with file/line context.
+6. If the user confirms whether a comment was incorporated, call
+   `POST /v1/reviews/:review_id/comments/feedback` with the `comment_id` and
+   `incorporated` true/false. If `comment_id` is missing, derive it as noted below.
 
 ## Example (Production)
 
@@ -140,4 +164,7 @@ curl -s \
 
 - Do not log or expose tokens in output.
 - Always use `https://api.propelcode.ai` until told otherwise.
-- Only use `POST /v1/reviews` and `GET /v1/reviews/:review_id`.
+- Only use `POST /v1/reviews`, `GET /v1/reviews/:review_id`, and
+  `POST /v1/reviews/:review_id/comments/feedback`.
+- When the user says a comment was incorporated (or not), report it via the
+  feedback endpoint using the `comment_id` from the review response. If `comment_id` is missing, derive it by trimming `file_path` and `message`, lowercasing and trimming `severity`, then computing the SHA-256 hex of `<file_path>\n<line>\n<severity>\n<message>`. If required fields are missing, ask the user before sending feedback.
