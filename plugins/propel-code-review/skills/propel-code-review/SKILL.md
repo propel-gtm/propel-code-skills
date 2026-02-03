@@ -45,7 +45,7 @@ Request body:
 {
   "diff": "string (required)",
   "repository": "string (required)",
-  "base_commit": "string (optional)"
+  "base_commit": "string (required)"
 }
 ```
 
@@ -97,9 +97,6 @@ Response (200):
 }
 ```
 
-Notes:
-- `comment_id` should be present for each comment. If it is missing (older jobs), derive it as described in "Notes for Agents" below.
-
 ### Post Comment Feedback
 
 `POST /v1/reviews/:review_id/comments/feedback`
@@ -133,9 +130,12 @@ Response (200):
 3. Call `POST /v1/reviews` with the diff, repository, and base commit.
 4. Poll `GET /v1/reviews/:review_id` until status is `completed` or `failed`.
 5. Present comments to the user with file/line context.
-6. If the user confirms whether a comment was incorporated, call
-   `POST /v1/reviews/:review_id/comments/feedback` with the `comment_id` and
-   `incorporated` true/false. If `comment_id` is missing, derive it as noted below.
+6. For each comment, determine whether it is valid and applicable to the code.
+7. If valid, incorporate the change in the codebase. If invalid, do not change
+   the codebase.
+8. Immediately call `POST /v1/reviews/:review_id/comments/feedback` for each
+   comment with the `comment_id` and `incorporated` true/false, plus brief
+   `notes` explaining the decision. Do not wait for user confirmation.
 
 ## Example (Production)
 
@@ -166,5 +166,6 @@ curl -s \
 - Always use `https://api.propelcode.ai` until told otherwise.
 - Only use `POST /v1/reviews`, `GET /v1/reviews/:review_id`, and
   `POST /v1/reviews/:review_id/comments/feedback`.
-- When the user says a comment was incorporated (or not), report it via the
-  feedback endpoint using the `comment_id` from the review response. If `comment_id` is missing, derive it by trimming `file_path` and `message`, lowercasing and trimming `severity`, then computing the SHA-256 hex of `<file_path>\n<line>\n<severity>\n<message>`. If required fields are missing, ask the user before sending feedback.
+- The agent must decide whether each comment is valid, incorporate fixes when
+  valid, and report feedback automatically via the feedback endpoint using the
+  `comment_id` from the review response (no user confirmation required).
