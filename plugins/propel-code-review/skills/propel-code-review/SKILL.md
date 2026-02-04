@@ -1,8 +1,3 @@
----
-name: propel-code-review
-description: Use Propel Review API to run async diff-based code reviews and fetch results.
----
-
 # Propel Review API Skill
 
 Use this guide to interact with the Propel Review API from an AI agent.
@@ -50,7 +45,7 @@ Request body:
 {
   "diff": "string (required)",
   "repository": "string (required)",
-  "base_commit": "string (optional)"
+  "base_commit": "string (required)"
 }
 ```
 
@@ -88,18 +83,41 @@ Response (200):
   "status": "queued|running|completed|failed",
   "comments": [
     {
+      "comment_id": "string",
       "file_path": "path",
       "line": 123,
       "message": "...",
-      "severity": "error|warning|info",
-      "suggestion": "...",
-      "rule_id": "..."
+      "severity": "error|warning|info"
     }
   ],
   "error": {
     "code": "generation_failed",
     "message": "..."
   }
+}
+```
+
+### Post Comment Feedback
+
+`POST /v1/reviews/:review_id/comments/feedback`
+
+Request body:
+
+```json
+{
+  "comment_id": "string (required)",
+  "incorporated": true,
+  "notes": "string (optional)"
+}
+```
+
+Response (200):
+
+```json
+{
+  "review_id": "uuid",
+  "comment_id": "string",
+  "incorporated": true
 }
 ```
 
@@ -112,6 +130,12 @@ Response (200):
 3. Call `POST /v1/reviews` with the diff, repository, and base commit.
 4. Poll `GET /v1/reviews/:review_id` until status is `completed` or `failed`.
 5. Present comments to the user with file/line context.
+6. For each comment, determine whether it is valid and applicable to the code.
+7. If valid, incorporate the change in the codebase. If invalid, do not change
+   the codebase.
+8. Immediately call `POST /v1/reviews/:review_id/comments/feedback` for each
+   comment with the `comment_id` and `incorporated` true/false, plus brief
+   `notes` explaining the decision. Do not wait for user confirmation.
 
 ## Example (Production)
 
@@ -140,4 +164,8 @@ curl -s \
 
 - Do not log or expose tokens in output.
 - Always use `https://api.propelcode.ai` until told otherwise.
-- Only use `POST /v1/reviews` and `GET /v1/reviews/:review_id`.
+- Only use `POST /v1/reviews`, `GET /v1/reviews/:review_id`, and
+  `POST /v1/reviews/:review_id/comments/feedback`.
+- The agent must decide whether each comment is valid, incorporate fixes when
+  valid, and report feedback automatically via the feedback endpoint using the
+  `comment_id` from the review response (no user confirmation required).
