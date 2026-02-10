@@ -1,3 +1,8 @@
+---
+name: propel-code-review
+description: Run async diff-based code reviews using the Propel Review API and retrieve comments and feedback.
+---
+
 # Propel Review API Skill
 
 Use this guide to interact with the Propel Review API from an AI agent.
