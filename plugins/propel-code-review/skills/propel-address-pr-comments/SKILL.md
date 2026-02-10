@@ -1,46 +1,26 @@
 ---
 name: propel-address-pr-comments
-description: Find the open pull request for the current branch with gh CLI, run a Propel Review API diff review, present numbered findings, ask the user which findings to address, and apply fixes for selected comments. Use when the user wants to triage or resolve Propel code review comments on an active PR.
+description: Help address Propel Code AI review/issue comments on the open GitHub PR for the current branch using gh CLI; verify gh auth first and prompt the user to authenticate if not logged in.
+metadata:
+  short-description: Address Propel AI comments in a GitHub PR review
 ---
 
-# Propel PR Comment Resolution
+# PR Comment Handler
 
-Use this skill to locate the open PR for the current branch, gather Propel review
-findings, and implement selected fixes.
+Guide to find the open PR for the current branch and address its comments with gh CLI. Run all `gh` commands with elevated network access.
 
-## Requirements
+Prereq: ensure `gh` is authenticated (for example, run `gh auth login` once), then run `gh auth status` with escalated permissions (include workflow/repo scopes) so `gh` commands succeed. If sandboxing blocks `gh auth status`, rerun it with `sandbox_permissions=require_escalated`.
 
-- Run all `gh` commands with elevated network access.
-- Ensure `gh` is authenticated before fetching PR metadata.
-- Ensure `PROPEL_API_KEY` is set to a valid Propel Review API token.
-- Never print tokens in logs or final output.
+## 1) Inspect comments needing attention
+- Run scripts/fetch_comments.py which will print out all the comments and review threads on the PR
 
-## Workflow
+## 2) Ask the user for clarification
+- Number only comments/review threads authored by Propel Code AI and provide a short summary of what would be required to apply a fix for each
+- Ignore non-Propel comments unless the user explicitly asks to include them
+- Ask the user which numbered comments should be addressed
 
-1. Verify `gh` authentication and scopes.
-   - Run `gh auth status` with elevated network access.
-   - Ensure repo/workflow access is available.
-   - If sandboxing blocks `gh auth status`, rerun with
-     `sandbox_permissions=require_escalated`.
-2. Fetch Propel findings for the current branch PR.
-   - Run `scripts/fetch_comments.py`.
-   - The script resolves the open PR for `HEAD`, computes the diff against the PR
-     base branch, creates an async Propel review, polls for completion, and prints
-     numbered findings.
-3. Ask the user what to fix.
-   - Summarize each numbered finding in one short line.
-   - Ask which finding numbers should be addressed now.
-4. If the user selects findings, apply targeted fixes.
-   - Edit code to address only selected findings.
-   - Run focused verification relevant to changed files.
-   - Report what was fixed and what remains.
-5. If the user does not select findings, stop after summarizing.
+## 3) If user chooses comments
+- Apply fixes for the selected Propel Code AI comments
 
-## Failure Handling
-
-- If `gh` fails due to auth or rate limits, ask the user to re-run `gh auth login`,
-  then retry.
-- If no open PR is found for the current branch, ask the user for the intended base
-  branch and rerun `scripts/fetch_comments.py --base-branch <branch>`.
-- If Propel review status is `failed`, surface the API error and stop.
-
+Notes:
+- If gh hits auth/rate issues mid-run, prompt the user to re-authenticate with `gh auth login`, then retry.
