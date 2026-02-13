@@ -9,6 +9,11 @@
   },
   "plugins": [
     {
+      "name": "carl",
+      "source": "./plugins/carl",
+      "description": "Coding Agent Review Loop that repeatedly runs Propel review until no comments remain"
+    },
+    {
       "name": "propel-code-review",
       "source": "./plugins/propel-code-review",
       "description": "Propel Review API skill for async diff-based code reviews"
