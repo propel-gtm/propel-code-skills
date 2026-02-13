@@ -12,9 +12,48 @@ Always target the production API unless told otherwise.
 
 Run async, diff-based code reviews via the production API and retrieve comments.
 
-## Setup
+## Pre-flight: Verify API Key
 
-1. Set a Review API token in your shell (example):
+**Before making any API call**, check whether `PROPEL_API_KEY` is set:
+
+```bash
+echo "${PROPEL_API_KEY:-(not set)}"
+```
+
+If the variable is empty or unset, **do not attempt any API calls**. Follow these
+steps exactly — each step is a separate action:
+
+**Step 1** — Tell the user and open the browser. Send this message and run the
+Bash command in the same response (in parallel):
+
+Message to user:
+> `PROPEL_API_KEY` is not set. Opening the token creation page — the name and
+> scopes are pre-filled. Click **Create token**, copy it, and paste it here.
+
+Bash command:
+```bash
+open "http://localhost:4000/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write"
+```
+(On Linux use `xdg-open` instead of `open`.)
+
+**Step 2** — Wait for the user to paste the token. Do not proceed until the user
+pastes a value starting with `rev_`. If the value doesn't start with `rev_`, tell
+them it doesn't look valid and ask them to try again.
+
+**Step 3** — Once you have a valid token, persist it and load it into the session.
+Run this in a **single Bash call** (replace `<TOKEN>` with the actual token):
+
+```bash
+SHELL_RC=""; if [ -f "$HOME/.zshrc" ]; then SHELL_RC="$HOME/.zshrc"; elif [ -f "$HOME/.bashrc" ]; then SHELL_RC="$HOME/.bashrc"; fi; if [ -n "$SHELL_RC" ]; then printf '\n# Propel Review API token\nexport PROPEL_API_KEY="%s"\n' "<TOKEN>" >> "$SHELL_RC" && echo "Saved to $SHELL_RC"; else echo "No shell profile found"; fi && export PROPEL_API_KEY="<TOKEN>"
+```
+
+Tell the user where the key was saved (e.g. "Saved to ~/.zshrc").
+
+**Step 4** — Continue with the review workflow.
+
+## Setup (Manual)
+
+If you prefer to set the token yourself ahead of time:
 
 ```bash
 export PROPEL_API_KEY="rev_..."
@@ -160,10 +199,12 @@ curl -s \
 
 ## Troubleshooting
 
-- `404 {"error":"Repository not found"}` means the repository string does not
-  match a repo connected to the account.
-- `401/403` usually means the token is missing, expired, or missing scopes.
-- `413` means the diff exceeded the 1,000,000 byte limit.
+- `401/403` — re-run the pre-flight check above. The token may be missing,
+  expired, or missing scopes. Guide the user to generate a new one at:
+  http://localhost:4000/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write
+- `404 {"error":"Repository not found"}` — the repository string does not match
+  a repo connected to the account.
+- `413` — the diff exceeded the 1,000,000 byte limit.
 
 ## Notes for Agents
 
