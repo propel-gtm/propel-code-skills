@@ -7,18 +7,27 @@ This repo ships the following skills:
 
 ## Prerequisite
 
-Set `PROPEL_API_KEY` in your environment before running the skill. Obtain the key from [Company Settings](https://app.propelcode.ai/administration/settings) in the Propel web app.
+Set `PROPEL_API_KEY` in your environment before running the skill. Generate a
+Review API token from the
+[Review API Tokens](https://app.propelcode.ai/administration/settings?tab=review-api-tokens&scopes=reviews:read,reviews:write)
+page in the Propel web app.
 
 ```
-export PROPEL_API_KEY="your_key_here"
+export PROPEL_API_KEY="rev_..."
 ```
 
-To make it persistent in bash, add the export line to your bash profile and reload:
+To make it persistent, add the export to your shell profile:
 
+```bash
+# bash
+echo 'export PROPEL_API_KEY="rev_..."' >> ~/.bashrc && source ~/.bashrc
+
+# zsh
+echo 'export PROPEL_API_KEY="rev_..."' >> ~/.zshrc && source ~/.zshrc
 ```
-echo 'export PROPEL_API_KEY="your_key_here"' >> ~/.bash_profile
-source ~/.bash_profile
-```
+
+> **Note:** If you skip this step, the skill will prompt you to generate a token
+> interactively when it runs.
 
 ## Claude (Claude Code)
 
