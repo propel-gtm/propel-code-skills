@@ -20,8 +20,9 @@ Run async, diff-based code reviews via the production API and retrieve comments.
 if [ -n "$PROPEL_API_KEY" ]; then echo "PROPEL_API_KEY is set"; else echo "PROPEL_API_KEY is not set"; fi
 ```
 
-If the variable is empty or unset, **do not attempt any API calls**. Follow these
-steps exactly — each step is a separate action:
+If the variable is empty, unset, or you just received a `401/403` from the Review
+API, **do not attempt any API calls** with the current value. Follow these steps
+to capture a fresh token — each step is a separate action:
 
 **Step 1** — Tell the user and open the browser. Send this message and run the
 Bash command in the same response (in parallel):
@@ -44,7 +45,7 @@ them it doesn't look valid and ask them to try again.
 Run this in a **single Bash call** (replace `<TOKEN>` with the actual token):
 
 ```bash
-case "$SHELL" in */zsh) SHELL_RC="$HOME/.zshrc" ;; */bash) SHELL_RC="$HOME/.bashrc" ;; *) SHELL_RC="" ;; esac; if [ -z "$SHELL_RC" ] && [ -f "$HOME/.zshrc" ]; then SHELL_RC="$HOME/.zshrc"; fi; if [ -z "$SHELL_RC" ] && [ -f "$HOME/.bashrc" ]; then SHELL_RC="$HOME/.bashrc"; fi; if [ -n "$SHELL_RC" ]; then printf '\n# Propel Review API token\nexport PROPEL_API_KEY="%s"\n' "<TOKEN>" >> "$SHELL_RC" && echo "Saved to $SHELL_RC"; else echo "No shell profile found"; fi && export PROPEL_API_KEY="<TOKEN>"
+case "$SHELL" in */zsh) SHELL_RC="$HOME/.zshrc" ;; */bash) SHELL_RC="$HOME/.bashrc" ;; *) SHELL_RC="" ;; esac; if [ -z "$SHELL_RC" ] && [ -f "$HOME/.zshrc" ]; then SHELL_RC="$HOME/.zshrc"; fi; if [ -z "$SHELL_RC" ] && [ -f "$HOME/.bashrc" ]; then SHELL_RC="$HOME/.bashrc"; fi; if [ -n "$SHELL_RC" ]; then printf '\n# Propel Review API token\nexport PROPEL_API_KEY="%s"\n' "<TOKEN>" >> "$SHELL_RC" && echo "Saved to $SHELL_RC"; else echo "No shell profile found"; fi; export PROPEL_API_KEY="<TOKEN>"
 ```
 
 Tell the user where the key was saved (e.g. "Saved to ~/.zshrc").

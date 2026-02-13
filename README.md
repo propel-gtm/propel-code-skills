@@ -9,7 +9,7 @@ This repo ships the following skills:
 
 Set `PROPEL_API_KEY` in your environment before running the skill. Generate a
 Review API token from the
-[Review API Tokens](https://app.propelcode.ai/administration/settings?tab=review-api-tokens)
+[Review API Tokens](https://app.propelcode.ai/administration/settings?tab=review-api-tokens&scopes=reviews:read,reviews:write)
 page in the Propel web app.
 
 ```
