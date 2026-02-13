@@ -18,7 +18,10 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from urllib.parse import urlparse
 from typing import Any
+
+COMMAND_TIMEOUT_SECONDS = 120
 
 QUERY = """\
 query(
@@ -93,7 +96,21 @@ query(
 
 
 def _run(cmd: list[str], stdin: str | None = None) -> str:
-    p = subprocess.run(cmd, input=stdin, capture_output=True, text=True)
+    try:
+        p = subprocess.run(
+            cmd,
+            input=stdin,
+            capture_output=True,
+            text=True,
+            timeout=COMMAND_TIMEOUT_SECONDS,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"Command not found: {cmd[0]}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"Command timed out after {COMMAND_TIMEOUT_SECONDS}s: {' '.join(cmd)}"
+        ) from exc
+
     if p.returncode != 0:
         raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{p.stderr}")
     return p.stdout
@@ -123,11 +140,16 @@ def gh_pr_view_json(fields: str) -> dict[str, Any]:
 def get_current_pr_ref() -> tuple[str, str, int]:
     """
     Resolve the PR for the current branch (whatever gh considers associated).
-    Works for cross-repo PRs too, by reading head repository owner/name.
+    Works for fork-based PRs by parsing owner/repo from the PR URL (base repo).
     """
-    pr = gh_pr_view_json("number,headRepositoryOwner,headRepository")
-    owner = pr["headRepositoryOwner"]["login"]
-    repo = pr["headRepository"]["name"]
+    pr = gh_pr_view_json("number,url")
+    url = pr["url"]
+    path_parts = urlparse(url).path.strip("/").split("/")
+    if len(path_parts) < 4 or path_parts[2] != "pull":
+        raise RuntimeError(f"Unexpected PR URL format: {url}")
+
+    owner = path_parts[0]
+    repo = path_parts[1]
     number = int(pr["number"])
     return owner, repo, number
 
@@ -175,10 +197,13 @@ def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
     comments_cursor: str | None = None
     reviews_cursor: str | None = None
     threads_cursor: str | None = None
+    has_more_comments = True
+    has_more_reviews = True
+    has_more_threads = True
 
     pr_meta: dict[str, Any] | None = None
 
-    while True:
+    while has_more_comments or has_more_reviews or has_more_threads:
         payload = gh_api_graphql(
             owner=owner,
             repo=repo,
@@ -202,20 +227,23 @@ def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
                 "repo": repo,
             }
 
-        c = pr["comments"]
-        r = pr["reviews"]
-        t = pr["reviewThreads"]
+        if has_more_comments:
+            c = pr["comments"]
+            conversation_comments.extend(c.get("nodes") or [])
+            comments_cursor = c["pageInfo"]["endCursor"]
+            has_more_comments = c["pageInfo"]["hasNextPage"]
 
-        conversation_comments.extend(c.get("nodes") or [])
-        reviews.extend(r.get("nodes") or [])
-        review_threads.extend(t.get("nodes") or [])
+        if has_more_reviews:
+            r = pr["reviews"]
+            reviews.extend(r.get("nodes") or [])
+            reviews_cursor = r["pageInfo"]["endCursor"]
+            has_more_reviews = r["pageInfo"]["hasNextPage"]
 
-        comments_cursor = c["pageInfo"]["endCursor"] if c["pageInfo"]["hasNextPage"] else None
-        reviews_cursor = r["pageInfo"]["endCursor"] if r["pageInfo"]["hasNextPage"] else None
-        threads_cursor = t["pageInfo"]["endCursor"] if t["pageInfo"]["hasNextPage"] else None
-
-        if not (comments_cursor or reviews_cursor or threads_cursor):
-            break
+        if has_more_threads:
+            t = pr["reviewThreads"]
+            review_threads.extend(t.get("nodes") or [])
+            threads_cursor = t["pageInfo"]["endCursor"]
+            has_more_threads = t["pageInfo"]["hasNextPage"]
 
     assert pr_meta is not None
     return {
