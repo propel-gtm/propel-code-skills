@@ -17,7 +17,7 @@ Run async, diff-based code reviews via the production API and retrieve comments.
 **Before making any API call**, check whether `PROPEL_API_KEY` is set:
 
 ```bash
-echo "${PROPEL_API_KEY:-(not set)}"
+if [ -n "$PROPEL_API_KEY" ]; then echo "PROPEL_API_KEY is set"; else echo "PROPEL_API_KEY is not set"; fi
 ```
 
 If the variable is empty or unset, **do not attempt any API calls**. Follow these
@@ -32,7 +32,7 @@ Message to user:
 
 Bash command:
 ```bash
-open "http://localhost:4000/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write"
+open "https://app.propelcode.ai/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write"
 ```
 (On Linux use `xdg-open` instead of `open`.)
 
@@ -44,7 +44,7 @@ them it doesn't look valid and ask them to try again.
 Run this in a **single Bash call** (replace `<TOKEN>` with the actual token):
 
 ```bash
-SHELL_RC=""; if [ -f "$HOME/.zshrc" ]; then SHELL_RC="$HOME/.zshrc"; elif [ -f "$HOME/.bashrc" ]; then SHELL_RC="$HOME/.bashrc"; fi; if [ -n "$SHELL_RC" ]; then printf '\n# Propel Review API token\nexport PROPEL_API_KEY="%s"\n' "<TOKEN>" >> "$SHELL_RC" && echo "Saved to $SHELL_RC"; else echo "No shell profile found"; fi && export PROPEL_API_KEY="<TOKEN>"
+case "$SHELL" in */zsh) SHELL_RC="$HOME/.zshrc" ;; */bash) SHELL_RC="$HOME/.bashrc" ;; *) SHELL_RC="" ;; esac; if [ -z "$SHELL_RC" ] && [ -f "$HOME/.zshrc" ]; then SHELL_RC="$HOME/.zshrc"; fi; if [ -z "$SHELL_RC" ] && [ -f "$HOME/.bashrc" ]; then SHELL_RC="$HOME/.bashrc"; fi; if [ -n "$SHELL_RC" ]; then printf '\n# Propel Review API token\nexport PROPEL_API_KEY="%s"\n' "<TOKEN>" >> "$SHELL_RC" && echo "Saved to $SHELL_RC"; else echo "No shell profile found"; fi && export PROPEL_API_KEY="<TOKEN>"
 ```
 
 Tell the user where the key was saved (e.g. "Saved to ~/.zshrc").
@@ -59,7 +59,7 @@ If you prefer to set the token yourself ahead of time:
 export PROPEL_API_KEY="rev_..."
 ```
 
-The token must be a Review API token (scoped to `reviews:write` and/or `reviews:read`).
+The token must be a Review API token (scoped to both `reviews:write` and `reviews:read`).
 
 ## Base URL
 
@@ -201,7 +201,7 @@ curl -s \
 
 - `401/403` — re-run the pre-flight check above. The token may be missing,
   expired, or missing scopes. Guide the user to generate a new one at:
-  http://localhost:4000/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write
+  https://app.propelcode.ai/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write
 - `404 {"error":"Repository not found"}` — the repository string does not match
   a repo connected to the account.
 - `413` — the diff exceeded the 1,000,000 byte limit.
