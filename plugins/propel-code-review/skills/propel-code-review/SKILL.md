@@ -28,14 +28,15 @@ to capture a fresh token — each step is a separate action:
 Bash command in the same response (in parallel):
 
 Message to user:
-> `PROPEL_API_KEY` is not set. Opening the token creation page — the name and
-> scopes are pre-filled. Click **Create token**, copy it, and paste it here.
+> `PROPEL_API_KEY` is not set. Opening the token creation page:
+> https://app.propelcode.ai/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write
+> The name and scopes are pre-filled. Click **Create token**, copy it, and paste it here.
 
 Bash command:
 ```bash
-open "https://app.propelcode.ai/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write"
+URL="https://app.propelcode.ai/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write"
+if command -v xdg-open >/dev/null; then xdg-open "$URL"; else open "$URL"; fi
 ```
-(On Linux use `xdg-open` instead of `open`.)
 
 **Step 2** — Wait for the user to paste the token. Do not proceed until the user
 pastes a value starting with `rev_`. If the value doesn't start with `rev_`, tell
