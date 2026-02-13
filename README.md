@@ -1,9 +1,11 @@
-# Propel Code Review Skills - Install Guide
+# Propel Code Skills - Install Guide
 
-This repo ships the following skills:
+This repo ships these skills:
 
 - `plugins/propel-code-review/skills/propel-code-review`
 - `plugins/propel-code-review/skills/propel-address-pr-comments`
+- `plugins/carl/skills/carl`
+
 
 ## Prerequisite
 
@@ -36,6 +38,7 @@ Run these commands in Claude:
 ```
 /plugin marketplace add propel-gtm/propel-code-skills
 /plugin install propel-code-review@propel-code-skills
+/plugin install carl@propel-code-skills
 ```
 
 ## Codex
@@ -53,6 +56,7 @@ Project-scoped install (recommended):
 ```
 mkdir -p .cursor/skills
 cp -R plugins/propel-code-review/skills/propel-code-review .cursor/skills/
+cp -R plugins/carl/skills/carl .cursor/skills/
 cp -R plugins/propel-code-review/skills/propel-address-pr-comments .cursor/skills/
 ```
 
@@ -61,6 +65,7 @@ User-scoped install:
 ```
 mkdir -p ~/.cursor/skills
 cp -R /path/to/propel-code-skills/plugins/propel-code-review/skills/propel-code-review ~/.cursor/skills/
+cp -R /path/to/propel-code-skills/plugins/carl/skills/carl ~/.cursor/skills/
 cp -R /path/to/propel-code-skills/plugins/propel-code-review/skills/propel-address-pr-comments ~/.cursor/skills/
 ```
 
@@ -73,6 +78,12 @@ Tell your agent:
 
 ```
 Use `propel-code-review` to review the diff from base branch to HEAD, then report any findings before final output.
+```
+
+Or for an automatic review/fix loop:
+
+```
+Use `carl` to repeatedly run `propel-code-review` and address valid comments until none remain.
 ```
 
 For PR-specific triage and fixing:
