@@ -3,22 +3,33 @@
 This repo ships these skills:
 
 - `plugins/propel-code-review/skills/propel-code-review`
+- `plugins/propel-code-review/skills/propel-address-pr-comments`
 - `plugins/carl/skills/carl`
+
 
 ## Prerequisite
 
-Set `PROPEL_API_KEY` in your environment before running the skill. Obtain the key from [Company Settings](https://app.propelcode.ai/administration/settings) in the Propel web app.
+Set `PROPEL_API_KEY` in your environment before running the skill. Generate a
+Review API token from the
+[Review API Tokens](https://app.propelcode.ai/administration/settings?tab=review-api-tokens&scopes=reviews:read,reviews:write)
+page in the Propel web app.
 
 ```
-export PROPEL_API_KEY="your_key_here"
+export PROPEL_API_KEY="rev_..."
 ```
 
-To make it persistent in bash, add the export line to your bash profile and reload:
+To make it persistent, add the export to your shell profile:
 
+```bash
+# bash
+echo 'export PROPEL_API_KEY="rev_..."' >> ~/.bashrc && source ~/.bashrc
+
+# zsh
+echo 'export PROPEL_API_KEY="rev_..."' >> ~/.zshrc && source ~/.zshrc
 ```
-echo 'export PROPEL_API_KEY="your_key_here"' >> ~/.bash_profile
-source ~/.bash_profile
-```
+
+> **Note:** If you skip this step, the skill will prompt you to generate a token
+> interactively when it runs.
 
 ## Claude (Claude Code)
 
@@ -46,6 +57,7 @@ Project-scoped install (recommended):
 mkdir -p .cursor/skills
 cp -R plugins/propel-code-review/skills/propel-code-review .cursor/skills/
 cp -R plugins/carl/skills/carl .cursor/skills/
+cp -R plugins/propel-code-review/skills/propel-address-pr-comments .cursor/skills/
 ```
 
 User-scoped install:
@@ -54,6 +66,7 @@ User-scoped install:
 mkdir -p ~/.cursor/skills
 cp -R /path/to/propel-code-skills/plugins/propel-code-review/skills/propel-code-review ~/.cursor/skills/
 cp -R /path/to/propel-code-skills/plugins/carl/skills/carl ~/.cursor/skills/
+cp -R /path/to/propel-code-skills/plugins/propel-code-review/skills/propel-address-pr-comments ~/.cursor/skills/
 ```
 
 Notes:
@@ -71,4 +84,10 @@ Or for an automatic review/fix loop:
 
 ```
 Use `carl` to repeatedly run `propel-code-review` and address valid comments until none remain.
+```
+
+For PR-specific triage and fixing:
+
+```
+Use `propel-address-pr-comments` to find the open PR for the current branch, fetch Propel findings, ask which comments to address, and apply fixes for selected findings.
 ```
