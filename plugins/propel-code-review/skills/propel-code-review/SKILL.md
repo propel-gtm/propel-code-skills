@@ -130,28 +130,31 @@ Response (200):
 
 ## Workflow (Recommended)
 
-1. Compute the base commit (must exist in the remote repo history):
-   - `git rev-parse main`
-2. Compute the repository slug:
+1. Resolve the base branch (PR base when available; otherwise remote default branch):
+   - `BASE_BRANCH=$(gh pr view --json baseRefName -q '.baseRefName' 2>/dev/null || git remote show origin | sed -n '/HEAD branch/s/.*: //p')`
+2. Compute the base commit (must exist in the remote repo history):
+   - `git rev-parse "$BASE_BRANCH"`
+3. Compute the repository slug:
    - `git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\\.git$//'`
-3. Generate the diff:
-   - `git diff main`
-4. Call `POST /v1/reviews` with the diff, base commit, and repository using the canonical repo slug.
-5. Poll `GET /v1/reviews/:review_id` every 30 seconds until status is `completed` or `failed`.
-6. Present comments to the user with file/line context.
-7. For each comment, determine whether it is valid and applicable to the code.
-8. If valid, incorporate the change in the codebase. If invalid, do not change
+4. Generate the diff:
+   - `git diff "$BASE_BRANCH"`
+5. Call `POST /v1/reviews` with the diff, base commit, and repository using the canonical repo slug.
+6. Poll `GET /v1/reviews/:review_id` every 30 seconds until status is `completed` or `failed`.
+7. Present comments to the user with file/line context.
+8. For each comment, determine whether it is valid and applicable to the code.
+9. If valid, incorporate the change in the codebase. If invalid, do not change
    the codebase.
-9. Immediately call `POST /v1/reviews/:review_id/comments/feedback` for each
+10. Immediately call `POST /v1/reviews/:review_id/comments/feedback` for each
    comment with the `comment_id` and `incorporated` true/false, plus brief
    `notes` explaining the decision. Do not wait for user confirmation.
 
 ## Example (Production)
 
 ```bash
-BASE_COMMIT=$(git rev-parse main)
+BASE_BRANCH=$(gh pr view --json baseRefName -q '.baseRefName' 2>/dev/null || git remote show origin | sed -n '/HEAD branch/s/.*: //p')
+BASE_COMMIT=$(git rev-parse "$BASE_BRANCH")
 REPO_SLUG=$(git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\\.git$//')
-git diff main > /tmp/review_api.diff
+git diff "$BASE_BRANCH" > /tmp/review_api.diff
 
 CREATE_RESPONSE=$(curl -s \
   -H "Authorization: Bearer $PROPEL_API_KEY" \
