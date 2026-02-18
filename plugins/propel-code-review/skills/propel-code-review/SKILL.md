@@ -103,6 +103,8 @@ Constraints:
 Notes:
 - `base_commit` should be a commit that exists in the remote repo history
   (typically the base commit of the branch you are reviewing).
+- `repository` should be the canonical repo slug (for example, `owner/repo`)
+  derived from the git remote URL.
 
 Response (202):
 
@@ -169,34 +171,60 @@ Response (200):
 
 ## Workflow (Recommended)
 
-1. Compute the base commit (must exist in the remote repo history):
-   - `git rev-parse main`
-2. Generate the diff:
-   - `git diff main...HEAD`
-3. Call `POST /v1/reviews` with the diff, repository, and base commit.
-4. Poll `GET /v1/reviews/:review_id` until status is `completed` or `failed`.
-5. Present comments to the user with file/line context.
-6. For each comment, determine whether it is valid and applicable to the code.
-7. If valid, incorporate the change in the codebase. If invalid, do not change
+1. Resolve the base branch (PR base when available; otherwise remote default branch):
+   - `BASE_BRANCH=$(gh pr view --json baseRefName -q '.baseRefName' 2>/dev/null || git remote show origin | sed -n '/HEAD branch/s/.*: //p')`
+2. Compute the base commit (must exist in the remote repo history):
+   - `git rev-parse "$BASE_BRANCH"`
+3. Compute the repository slug:
+   - `git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\\.git$//'`
+4. Generate the diff:
+   - `git diff "$BASE_BRANCH"`
+5. Call `POST /v1/reviews` with the diff, base commit, and repository using the canonical repo slug.
+6. Poll `GET /v1/reviews/:review_id` every 30 seconds until status is `completed` or `failed`.
+7. Present comments to the user with file/line context.
+8. For each comment, determine whether it is valid and applicable to the code.
+9. If valid, incorporate the change in the codebase. If invalid, do not change
    the codebase.
-8. Immediately call `POST /v1/reviews/:review_id/comments/feedback` for each
+10. Immediately call `POST /v1/reviews/:review_id/comments/feedback` for each
    comment with the `comment_id` and `incorporated` true/false, plus brief
    `notes` explaining the decision. Do not wait for user confirmation.
 
 ## Example (Production)
 
 ```bash
-BASE_COMMIT=$(git rev-parse main)
-git diff main...HEAD > /tmp/review_api.diff
+BASE_BRANCH=$(gh pr view --json baseRefName -q '.baseRefName' 2>/dev/null || git remote show origin | sed -n '/HEAD branch/s/.*: //p')
+BASE_COMMIT=$(git rev-parse "$BASE_BRANCH")
+REPO_SLUG=$(git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\\.git$//')
+git diff "$BASE_BRANCH" > /tmp/review_api.diff
 
-curl -s \
+CREATE_RESPONSE=$(curl -s \
   -H "Authorization: Bearer $PROPEL_API_KEY" \
   -H "Content-Type: application/json" \
   --data-binary @<(jq -n --arg diff "$(cat /tmp/review_api.diff)" \
-                    --arg repo "owner/repo" \
+                    --arg repo "$REPO_SLUG" \
                     --arg base "$BASE_COMMIT" \
                     '{diff:$diff, repository:$repo, base_commit:$base}') \
-  https://api.propelcode.ai/v1/reviews
+  https://api.propelcode.ai/v1/reviews)
+
+REVIEW_ID=$(echo "$CREATE_RESPONSE" | jq -r '.review_id')
+if [ -z "$REVIEW_ID" ] || [ "$REVIEW_ID" = "null" ]; then
+  echo "$CREATE_RESPONSE"
+  exit 1
+fi
+
+while true; do
+  REVIEW_RESPONSE=$(curl -s \
+    -H "Authorization: Bearer $PROPEL_API_KEY" \
+    "https://api.propelcode.ai/v1/reviews/$REVIEW_ID")
+
+  STATUS=$(echo "$REVIEW_RESPONSE" | jq -r '.status')
+  if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
+    echo "$REVIEW_RESPONSE"
+    break
+  fi
+
+  sleep 30
+done
 ```
 
 ## Troubleshooting
@@ -214,6 +242,7 @@ curl -s \
 - Always use `https://api.propelcode.ai` until told otherwise.
 - Only use `POST /v1/reviews`, `GET /v1/reviews/:review_id`, and
   `POST /v1/reviews/:review_id/comments/feedback`.
+- Poll review status every 30 seconds to avoid tight loops.
 - The agent must decide whether each comment is valid, incorporate fixes when
   valid, and report feedback automatically via the feedback endpoint using the
   `comment_id` from the review response (no user confirmation required).
