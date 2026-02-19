@@ -1,47 +1,40 @@
-# Propel Code Review Skills - Install Guide
+# Propel Code Skills
 
-This repo ships the following skills:
+Official docs: [Skills](https://docs.propelcode.ai/features/skills)
 
-- `plugins/propel-code-review/skills/propel-code-review`
-- `plugins/propel-code-review/skills/propel-address-pr-comments`
+This repository packages two skills:
+
+- `propel-code-review`: Run async diff-based code reviews with the Propel Review API.
+- `propel-address-pr-comments`: Fetch and address Propel AI comments on the open PR for the current branch.
 
 ## Prerequisite
 
-Set `PROPEL_API_KEY` in your environment before running the skill. Obtain the key from [Company Settings](https://app.propelcode.ai/administration/settings) in the Propel web app.
+Set `PROPEL_API_KEY` before running these skills. Get the key from [Company Settings](https://app.propelcode.ai/administration/settings).
 
-```
-export PROPEL_API_KEY="your_key_here"
-```
-
-To make it persistent in bash, add the export line to your bash profile and reload:
-
-```
-echo 'export PROPEL_API_KEY="your_key_here"' >> ~/.bash_profile
-source ~/.bash_profile
+```bash
+export PROPEL_API_KEY="rev_..."
 ```
 
-## Claude (Claude Code)
+## Install
 
-Run these commands in Claude:
+### Codex
 
+```bash
+$skill-installer propel-gtm/propel-code-skills
 ```
+
+### Claude Code
+
+```text
 /plugin marketplace add propel-gtm/propel-code-skills
 /plugin install propel-code-review@propel-code-skills
 ```
 
-## Codex
-
-```
-$skill-installer propel-gtm/propel-code-skills
-```
-
-## Cursor
-
-Cursor supports Agent Skills defined in `SKILL.md` files.
+### Cursor
 
 Project-scoped install (recommended):
 
-```
+```bash
 mkdir -p .cursor/skills
 cp -R plugins/propel-code-review/skills/propel-code-review .cursor/skills/
 cp -R plugins/propel-code-review/skills/propel-address-pr-comments .cursor/skills/
@@ -49,25 +42,18 @@ cp -R plugins/propel-code-review/skills/propel-address-pr-comments .cursor/skill
 
 User-scoped install:
 
-```
+```bash
 mkdir -p ~/.cursor/skills
 cp -R /path/to/propel-code-skills/plugins/propel-code-review/skills/propel-code-review ~/.cursor/skills/
 cp -R /path/to/propel-code-skills/plugins/propel-code-review/skills/propel-address-pr-comments ~/.cursor/skills/
 ```
 
-Notes:
-- Cursor projects use `.cursor/skills/<skill-name>/SKILL.md` and Cursor also looks in `~/.cursor/skills` for global skills.
+## Usage Prompts
 
-## Best practice (coding agents)
-
-Tell your agent:
-
-```
-Use `propel-code-review` to review the diff from base branch to HEAD, then report any findings before final output.
+```text
+Use `propel-code-review` to review the diff from base branch to HEAD, then report findings before final output.
 ```
 
-For PR-specific triage and fixing:
-
-```
+```text
 Use `propel-address-pr-comments` to find the open PR for the current branch, fetch Propel findings, ask which comments to address, and apply fixes for selected findings.
 ```
