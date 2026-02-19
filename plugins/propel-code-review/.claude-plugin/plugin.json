@@ -3,7 +3,7 @@
   "author": {
     "name": "Propel Code"
   },
-  "description": "Propel Review API skill for async diff-based code reviews",
+  "description": "Propel Review API skills for async diff-based code reviews and PR comment triage",
   "version": "1.0.0",
   "skills": "./skills/",
   "keywords": [
