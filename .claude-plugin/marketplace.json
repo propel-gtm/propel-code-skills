@@ -22,8 +22,7 @@
         "automation",
         "agent-skill"
       ],
-      "category": "developer-tools",
-      "skills": "./plugins/propel-code-review/skills/"
+      "category": "developer-tools"
     }
   ]
 }
