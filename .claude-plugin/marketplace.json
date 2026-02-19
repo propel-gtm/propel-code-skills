@@ -2,16 +2,33 @@
   "name": "propel-code-skills",
   "description": "Skills for interacting with Propel Code review workflows and APIs.",
   "metadata": {
-    "description": "Skills for interacting with Propel Code review workflows and APIs."
+    "description": "Skills for interacting with Propel Code review workflows and APIs.",
+    "version": "1.0.0"
   },
   "owner": {
     "name": "Propel Code"
   },
   "plugins": [
     {
+      "name": "carl",
+      "source": "./plugins/carl",
+      "description": "Coding Agent Review Loop that repeatedly runs Propel review until no comments remain"
+    },
+    {
       "name": "propel-code-review",
       "source": "./plugins/propel-code-review",
-      "description": "Propel Review API skill for async diff-based code reviews"
+      "description": "Propel Review API skills for async diff-based code reviews and PR comment triage",
+      "version": "1.0.0",
+      "keywords": [
+        "propel",
+        "code-review",
+        "pull-request",
+        "github",
+        "automation",
+        "agent-skill"
+      ],
+      "category": "developer-tools",
+      "skills": "./plugins/propel-code-review/skills/"
     }
   ]
 }

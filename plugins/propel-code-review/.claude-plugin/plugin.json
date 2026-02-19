@@ -1,5 +1,17 @@
 {
   "name": "propel-code-review",
-  "description": "Propel Review API skill for async diff-based code reviews",
-  "version": "1.0.0"
+  "author": {
+    "name": "Propel Code"
+  },
+  "description": "Propel Review API skills for async diff-based code reviews and PR comment triage",
+  "version": "1.0.0",
+  "skills": "./skills/",
+  "keywords": [
+    "propel",
+    "code-review",
+    "pull-request",
+    "github",
+    "automation",
+    "agent-skill"
+  ]
 }

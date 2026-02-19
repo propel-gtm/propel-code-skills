@@ -1,0 +1,5 @@
+{
+  "name": "carl",
+  "description": "Coding Agent Review Loop that repeatedly runs Propel review until no comments remain",
+  "version": "1.0.0"
+}
