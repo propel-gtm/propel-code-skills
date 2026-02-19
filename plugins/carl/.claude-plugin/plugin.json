@@ -1,0 +1,16 @@
+{
+  "name": "carl",
+  "author": {
+    "name": "Propel Code"
+  },
+  "description": "Continuously run Propel code review, fix valid comments, and re-review until there are no remaining comments.",
+  "version": "1.0.0",
+  "skills": "./skills/carl",
+  "keywords": [
+    "propel",
+    "code-review",
+    "pull-request",
+    "automation",
+    "agent-skill"
+  ]
+}

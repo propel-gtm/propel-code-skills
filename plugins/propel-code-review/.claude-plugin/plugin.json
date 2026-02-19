@@ -5,11 +5,7 @@
   },
   "description": "Propel Review API skills for async diff-based code reviews and PR comment triage",
   "version": "1.0.0",
-  "skills": [
-    "./skills/propel-code-review",
-    "./skills/carl",
-    "./skills/propel-address-pr-comments"
-  ],
+  "skills": "./skills/propel-code-review",
   "keywords": [
     "propel",
     "code-review",
