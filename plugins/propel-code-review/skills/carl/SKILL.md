@@ -1,6 +1,7 @@
 ---
 name: carl
 description: Continuously run Propel code review, fix valid comments, and re-review until there are no remaining comments.
+allowed-tools: Bash, Read, Edit, Write, Grep, Glob
 ---
 
 # CARL (Coding Agent Review Loop)

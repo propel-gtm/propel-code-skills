@@ -1,6 +1,7 @@
 ---
 name: propel-code-review
 description: Run async diff-based code reviews using the Propel Review API and retrieve comments and feedback.
+allowed-tools: Bash, Read, Edit, Write, Grep, Glob
 ---
 
 # Propel Review API Skill
@@ -14,10 +15,18 @@ Run async, diff-based code reviews via the production API and retrieve comments.
 
 ## Pre-flight: Verify API Key
 
-**Before making any API call**, check whether `PROPEL_API_KEY` is set:
+**Before making any API call**, check whether `PROPEL_API_KEY` is available.
+First try the environment variable, then fall back to the env file:
 
 ```bash
-if [ -n "$PROPEL_API_KEY" ]; then echo "PROPEL_API_KEY is set"; else echo "PROPEL_API_KEY is not set"; fi
+if [ -z "$PROPEL_API_KEY" ] && [ -f "$HOME/.propel/env" ]; then
+  source "$HOME/.propel/env";
+fi;
+if [ -n "$PROPEL_API_KEY" ]; then
+  echo "PROPEL_API_KEY is set";
+else
+  echo "PROPEL_API_KEY is not set";
+fi
 ```
 
 If the variable is empty, unset, or you just received a `401/403` from the Review
@@ -42,14 +51,26 @@ if command -v xdg-open >/dev/null; then xdg-open "$URL"; else open "$URL"; fi
 pastes a value starting with `rev_`. If the value doesn't start with `rev_`, tell
 them it doesn't look valid and ask them to try again.
 
-**Step 3** — Once you have a valid token, persist it and load it into the session.
-Run this in a **single Bash call** (replace `<TOKEN>` with the actual token):
+**Step 3** — Once you have a valid token, persist it to `~/.propel/env` and the
+shell profile. Run this in a **single Bash call** (replace `<TOKEN>` with the
+actual token):
 
 ```bash
-case "$SHELL" in */zsh) SHELL_RC="$HOME/.zshrc" ;; */bash) SHELL_RC="$HOME/.bashrc" ;; *) SHELL_RC="" ;; esac; if [ -z "$SHELL_RC" ] && [ -f "$HOME/.zshrc" ]; then SHELL_RC="$HOME/.zshrc"; fi; if [ -z "$SHELL_RC" ] && [ -f "$HOME/.bashrc" ]; then SHELL_RC="$HOME/.bashrc"; fi; if [ -n "$SHELL_RC" ]; then printf '\n# Propel Review API token\nexport PROPEL_API_KEY="%s"\n' "<TOKEN>" >> "$SHELL_RC" && echo "Saved to $SHELL_RC"; else echo "No shell profile found"; fi; export PROPEL_API_KEY="<TOKEN>"
+mkdir -p "$HOME/.propel" \
+  && printf 'export PROPEL_API_KEY="%s"\n' "<TOKEN>" > "$HOME/.propel/env" \
+  && chmod 600 "$HOME/.propel/env" \
+  && echo "Saved to ~/.propel/env" \
+  && SHELL_RC=""; \
+     case "$SHELL" in */zsh) SHELL_RC="$HOME/.zshrc" ;; */bash) SHELL_RC="$HOME/.bashrc" ;; esac; \
+     if [ -z "$SHELL_RC" ] && [ -f "$HOME/.zshrc" ]; then SHELL_RC="$HOME/.zshrc"; fi; \
+     if [ -z "$SHELL_RC" ] && [ -f "$HOME/.bashrc" ]; then SHELL_RC="$HOME/.bashrc"; fi; \
+     if [ -n "$SHELL_RC" ] && ! grep -q 'propel/env' "$SHELL_RC"; then \
+       printf '\n# Propel Review API token\n[ -f "$HOME/.propel/env" ] && source "$HOME/.propel/env"\n' >> "$SHELL_RC" \
+       && echo "Added source line to $SHELL_RC"; \
+     fi
 ```
 
-Tell the user where the key was saved (e.g. "Saved to ~/.zshrc").
+Tell the user where the key was saved (e.g. "Saved to ~/.propel/env").
 
 **Step 4** — Continue with the review workflow.
 
@@ -58,7 +79,9 @@ Tell the user where the key was saved (e.g. "Saved to ~/.zshrc").
 If you prefer to set the token yourself ahead of time:
 
 ```bash
-export PROPEL_API_KEY="rev_..."
+mkdir -p ~/.propel
+echo 'export PROPEL_API_KEY="rev_..."' > ~/.propel/env
+chmod 600 ~/.propel/env
 ```
 
 The token must be a Review API token (scoped to both `reviews:write` and `reviews:read`).
@@ -226,6 +249,67 @@ while true; do
   sleep 30
 done
 ```
+
+Extract `review_id` from the response. If it is missing or `null`, show the
+error and stop.
+
+### Step 2 — Poll until complete (single Bash call)
+
+Poll the review status every 30 seconds in a loop. Run this as **one** Bash
+call (replace `<REVIEW_ID>` with the actual ID):
+
+```bash
+# Poll review status every 30s until completed or failed
+source "$HOME/.propel/env" \
+  && REVIEW_ID="<REVIEW_ID>" \
+  && while true; do
+       REVIEW_RESPONSE=$(curl -s \
+         -H "Authorization: Bearer $PROPEL_API_KEY" \
+         "https://api.propelcode.ai/v1/reviews/$REVIEW_ID") \
+       && STATUS=$(echo "$REVIEW_RESPONSE" | jq -r '.status') \
+       && echo "$(date +%H:%M:%S) Status: $STATUS";
+       if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
+         echo "$REVIEW_RESPONSE" | jq .;
+         break;
+       fi;
+       sleep 30;
+     done
+```
+
+### Step 3 — Process comments and send feedback
+
+Read the review response from Step 2. For each comment:
+
+1. Determine whether the comment is valid and applicable to the code.
+2. If valid, incorporate the change in the codebase using Edit/Write tools.
+3. If invalid, do not change the codebase.
+
+After processing all comments, send feedback for **every** comment in a
+**single** Bash call. Build the feedback calls as a chain (replace values):
+
+```bash
+# Send feedback for all comments in one call (chain with &&)
+source "$HOME/.propel/env" \
+  && curl -s -X POST \
+       -H "Authorization: Bearer $PROPEL_API_KEY" \
+       -H "Content-Type: application/json" \
+       -d '{"comment_id":"<ID1>","incorporated":true,"notes":"<NOTES1>"}' \
+       "https://api.propelcode.ai/v1/reviews/<REVIEW_ID>/comments/feedback" \
+  && curl -s -X POST \
+       -H "Authorization: Bearer $PROPEL_API_KEY" \
+       -H "Content-Type: application/json" \
+       -d '{"comment_id":"<ID2>","incorporated":false,"notes":"<NOTES2>"}' \
+       "https://api.propelcode.ai/v1/reviews/<REVIEW_ID>/comments/feedback"
+```
+
+Chain all feedback calls with `&&` so they run in one Bash invocation.
+
+### Step 4 — Present results
+
+Present each comment to the user with:
+- File path and line number
+- The comment message and severity
+- Whether it was incorporated and why
 
 ## Troubleshooting
 
