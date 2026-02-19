@@ -30,16 +30,19 @@ echo 'export PROPEL_API_KEY="rev_..."' >> ~/.zshrc && source ~/.zshrc
 
 ### Codex
 
+Install from GitHub (installs all three skills: `propel-code-review`, `carl`, and `propel-address-pr-comments`):
+
 ```bash
 $skill-installer propel-gtm/propel-code-skills
 ```
 
 ### Claude Code
 
+Run these commands in Claude Code to install all three skills (`propel-code-review`, `carl`, and `propel-address-pr-comments`):
+
 ```text
 /plugin marketplace add propel-gtm/propel-code-skills
 /plugin install propel-code-review@propel-code-skills
-/plugin install carl@propel-code-skills
 ```
 
 ### Cursor
@@ -49,7 +52,7 @@ Project-scoped install (recommended):
 ```bash
 mkdir -p .cursor/skills
 cp -R plugins/propel-code-review/skills/propel-code-review .cursor/skills/
-cp -R plugins/carl/skills/carl .cursor/skills/
+cp -R plugins/propel-code-review/skills/carl .cursor/skills/
 cp -R plugins/propel-code-review/skills/propel-address-pr-comments .cursor/skills/
 ```
 
@@ -58,7 +61,7 @@ User-scoped install:
 ```bash
 mkdir -p ~/.cursor/skills
 cp -R /path/to/propel-code-skills/plugins/propel-code-review/skills/propel-code-review ~/.cursor/skills/
-cp -R /path/to/propel-code-skills/plugins/carl/skills/carl ~/.cursor/skills/
+cp -R /path/to/propel-code-skills/plugins/propel-code-review/skills/carl ~/.cursor/skills/
 cp -R /path/to/propel-code-skills/plugins/propel-code-review/skills/propel-address-pr-comments ~/.cursor/skills/
 ```
 
