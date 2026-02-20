@@ -48,8 +48,11 @@ def _mock_run_factory():
         if cmd[:3] == ["gh", "auth", "status"]:
             return _Proc(0, "", "")
 
-        if cmd[:5] == ["gh", "pr", "status", "--json", "currentBranch"]:
-            return _Proc(0, json.dumps({"currentBranch": {"number": 42}}), "")
+        if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return _Proc(0, "feature/test\n", "")
+
+        if cmd[:9] == ["gh", "pr", "list", "--state", "open", "--head", "feature/test", "--json", "number"]:
+            return _Proc(0, json.dumps([{"number": 42}]), "")
 
         if cmd[:4] == ["gh", "pr", "view", "42"] and cmd[4:6] == ["--json", "number,url,title"]:
             return _Proc(0, json.dumps({"number": 42, "url": "https://github.com/o/r/pull/42", "title": "Test PR"}), "")
@@ -266,8 +269,10 @@ def test_main_no_open_pr_returns_zero(mock_run):
         state["calls"].append(cmd)
         if cmd[:3] == ["gh", "auth", "status"]:
             return _Proc(0, "", "")
-        if cmd[:5] == ["gh", "pr", "status", "--json", "currentBranch"]:
-            return _Proc(0, json.dumps({"currentBranch": None}), "")
+        if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return _Proc(0, "feature/no-pr\n", "")
+        if cmd[:9] == ["gh", "pr", "list", "--state", "open", "--head", "feature/no-pr", "--json", "number"]:
+            return _Proc(0, json.dumps([]), "")
         raise AssertionError(f"Unhandled command: {cmd}")
 
     mock_run.side_effect = runner
@@ -347,8 +352,10 @@ def test_main_derives_repo_from_pr_url(mock_run):
         state["calls"].append(cmd)
         if cmd[:3] == ["gh", "auth", "status"]:
             return _Proc(0, "", "")
-        if cmd[:5] == ["gh", "pr", "status", "--json", "currentBranch"]:
-            return _Proc(0, json.dumps({"currentBranch": {"number": 42}}), "")
+        if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return _Proc(0, "feature/cross-repo\n", "")
+        if cmd[:9] == ["gh", "pr", "list", "--state", "open", "--head", "feature/cross-repo", "--json", "number"]:
+            return _Proc(0, json.dumps([{"number": 42}]), "")
         if cmd[:4] == ["gh", "pr", "view", "42"] and cmd[4:6] == ["--json", "number,url,title"]:
             return _Proc(0, json.dumps({"number": 42, "url": "https://github.com/base/repo/pull/42", "title": "Cross-repo PR"}), "")
         raise AssertionError(f"Unhandled command: {cmd}")

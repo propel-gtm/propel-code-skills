@@ -91,18 +91,28 @@ def _repo_slug_from_pr_url(url: str) -> str:
     raise ScriptError(f"Could not derive repository slug from PR URL: {url}")
 
 
+def _current_branch_name() -> str:
+    branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"]).strip()
+    if branch == "" or branch == "HEAD":
+        raise ScriptError("Could not determine current git branch")
+    return branch
+
+
 def _current_branch_pr_number() -> int | None:
-    payload = _run_json(["gh", "pr", "status", "--json", "currentBranch"])
-    if not isinstance(payload, dict):
-        raise ScriptError("Unexpected response from gh pr status")
-    current_branch = payload.get("currentBranch")
-    if current_branch is None:
+    branch = _current_branch_name()
+    payload = _run_json(
+        ["gh", "pr", "list", "--state", "open", "--head", branch, "--json", "number"]
+    )
+    if not isinstance(payload, list):
+        raise ScriptError("Unexpected response from gh pr list")
+    if len(payload) == 0:
         return None
-    if not isinstance(current_branch, dict):
-        raise ScriptError("Unexpected currentBranch payload from gh pr status")
-    number = current_branch.get("number")
+    first = payload[0]
+    if not isinstance(first, dict):
+        raise ScriptError("Unexpected PR payload from gh pr list")
+    number = first.get("number")
     if not isinstance(number, int):
-        raise ScriptError("Unexpected PR number from gh pr status")
+        raise ScriptError("Unexpected PR number from gh pr list")
     return number
 
 
