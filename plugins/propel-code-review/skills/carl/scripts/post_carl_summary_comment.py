@@ -3,6 +3,7 @@
 Post or update a sticky PR comment summarizing a local CARL loop run.
 
 Requires:
+  - PROPEL_API_KEY with reviews:write scope
   - gh CLI installed and authenticated
   - current branch associated with an open PR
 
@@ -22,14 +23,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+from urllib import error as urlerror
+from urllib import request as urlrequest
 
 COMMAND_TIMEOUT_SECONDS = 120
 MARKER = "<!-- carl-local-loop -->"
+DEFAULT_PROPEL_API_BASE_URL = "https://api.propelcode.ai"
 
 
 class ScriptError(RuntimeError):
@@ -91,29 +96,18 @@ def _current_pr_context() -> PullRequestContext:
     return PullRequestContext(number=number, url=url, title=title, repo=repo)
 
 
-def _list_bot_comments(pr_number: int, repo: str) -> list[dict[str, Any]]:
-    payload = _run_json(
-        [
-            "gh",
-            "api",
-            f"/repos/{repo}/issues/{pr_number}/comments",
-            "--paginate",
-        ]
-    )
-    if isinstance(payload, list):
-        return payload
-    raise ScriptError("Unexpected response while listing PR comments")
+def _propel_api_key() -> str:
+    key = os.getenv("PROPEL_API_KEY", "").strip()
+    if not key:
+        raise ScriptError("PROPEL_API_KEY is not set")
+    return key
 
 
-def _find_existing_comment_id(pr_number: int, repo: str) -> int | None:
-    comments = _list_bot_comments(pr_number, repo)
-    for c in comments:
-        body = str(c.get("body", ""))
-        if MARKER in body:
-            comment_id = c.get("id")
-            if isinstance(comment_id, int):
-                return comment_id
-    return None
+def _propel_api_base_url() -> str:
+    base_url = os.getenv("PROPEL_API_BASE_URL", DEFAULT_PROPEL_API_BASE_URL).strip()
+    if not base_url:
+        raise ScriptError("PROPEL_API_BASE_URL is empty")
+    return base_url.rstrip("/")
 
 
 def _iso_now() -> str:
@@ -155,32 +149,41 @@ def build_comment_body(
     )
 
 
-def _update_comment(comment_id: int, repo: str, body: str) -> None:
-    _run(
-        [
-            "gh",
-            "api",
-            "--method",
-            "PATCH",
-            f"/repos/{repo}/issues/comments/{comment_id}",
-            "-f",
-            f"body={body}",
-        ]
+def _post_summary_via_propel_api(*, api_base_url: str, api_key: str, repository: str, pr_number: int, body: str) -> dict[str, Any]:
+    payload = {
+        "repository": repository,
+        "pr_number": pr_number,
+        "marker": MARKER,
+        "body": body,
+    }
+    req = urlrequest.Request(
+        url=f"{api_base_url}/v1/reviews/pr-comments/upsert",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
     )
 
+    try:
+        with urlrequest.urlopen(req, timeout=COMMAND_TIMEOUT_SECONDS) as resp:
+            response_text = resp.read().decode("utf-8")
+    except urlerror.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace").strip()
+        detail = error_body if error_body else str(exc.reason)
+        raise ScriptError(f"Propel API request failed ({exc.code}): {detail}") from exc
+    except urlerror.URLError as exc:
+        raise ScriptError(f"Failed to reach Propel API: {exc.reason}") from exc
 
-def _create_comment(pr_number: int, repo: str, body: str) -> None:
-    _run(
-        [
-            "gh",
-            "api",
-            "--method",
-            "POST",
-            f"/repos/{repo}/issues/{pr_number}/comments",
-            "-f",
-            f"body={body}",
-        ]
-    )
+    try:
+        data = json.loads(response_text)
+    except json.JSONDecodeError as exc:
+        raise ScriptError("Invalid JSON response from Propel API") from exc
+    if not isinstance(data, dict):
+        raise ScriptError("Unexpected response from Propel API")
+    return data
 
 
 def _parse_review_ids(raw: str) -> list[str]:
@@ -232,20 +235,33 @@ def main(argv: list[str] | None = None) -> int:
             notes=args.notes,
         )
 
-        existing_comment_id = _find_existing_comment_id(pr.number, pr.repo)
-        action = "update" if existing_comment_id is not None else "create"
-
         if args.dry_run:
-            print(f"DRY_RUN action={action} repo={pr.repo} pr={pr.number}")
+            api_base_url = _propel_api_base_url()
+            print(f"DRY_RUN repo={pr.repo} pr={pr.number} endpoint={api_base_url}/v1/reviews/pr-comments/upsert")
             print(body)
             return 0
 
-        if existing_comment_id is not None:
-            _update_comment(existing_comment_id, pr.repo, body)
-            print(f"Updated CARL summary comment (id={existing_comment_id}) on {pr.repo}#{pr.number}")
+        api_key = _propel_api_key()
+        api_base_url = _propel_api_base_url()
+        result = _post_summary_via_propel_api(
+            api_base_url=api_base_url,
+            api_key=api_key,
+            repository=pr.repo,
+            pr_number=pr.number,
+            body=body,
+        )
+
+        action = str(result.get("action", "")).strip().lower()
+        comment_id = str(result.get("comment_id", "")).strip()
+        comment_url = str(result.get("url", "")).strip()
+        if action == "updated":
+            suffix = f" (id={comment_id})" if comment_id else ""
+            print(f"Updated CARL summary comment{suffix} on {pr.repo}#{pr.number}")
         else:
-            _create_comment(pr.number, pr.repo, body)
-            print(f"Created CARL summary comment on {pr.repo}#{pr.number}")
+            suffix = f" (id={comment_id})" if comment_id else ""
+            print(f"Created CARL summary comment{suffix} on {pr.repo}#{pr.number}")
+        if comment_url:
+            print(f"Comment URL: {comment_url}")
         return 0
     except ScriptError as exc:
         print(f"Error: {exc}", file=sys.stderr)

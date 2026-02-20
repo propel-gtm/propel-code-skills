@@ -85,7 +85,8 @@ Use `propel-address-pr-comments` to find the open PR for the current branch, fet
 
 ## CARL PR Summary Comment
 
-CARL can publish/update a sticky summary comment on the open PR using:
+CARL can publish/update a sticky summary comment on the open PR using Propel Review API.
+This keeps the comment author as Propel Bot (instead of local `gh` user identity).
 
 ```bash
 python plugins/propel-code-review/skills/carl/scripts/post_carl_summary_comment.py \
@@ -98,6 +99,12 @@ python plugins/propel-code-review/skills/carl/scripts/post_carl_summary_comment.
   --checks passed \
   --review-ids "019c...,019d..." \
   --notes "Local CARL loop finished."
+```
+
+Optional:
+
+```bash
+export PROPEL_API_BASE_URL="https://api.propelcode.ai"
 ```
 
 Dry run (no GitHub write):
