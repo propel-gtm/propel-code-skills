@@ -37,22 +37,33 @@ BASE_BRANCH=""
 REPO_SLUG=""
 BAD_REPO=""
 
+require_option_value() {
+  local opt="$1"
+  local value="${2-}"
+  if [[ -z "$value" || "$value" == --* ]]; then
+    echo "Missing value for $opt" >&2
+    usage
+    exit 1
+  fi
+  printf '%s\n' "$value"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --api-url)
-      API_URL="$2"
+      API_URL="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
     --base-branch)
-      BASE_BRANCH="$2"
+      BASE_BRANCH="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
     --repo)
-      REPO_SLUG="$2"
+      REPO_SLUG="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
     --bad-repo)
-      BAD_REPO="$2"
+      BAD_REPO="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
     *)
