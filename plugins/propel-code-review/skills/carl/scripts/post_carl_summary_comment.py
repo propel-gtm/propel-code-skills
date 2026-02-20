@@ -98,30 +98,85 @@ def _current_branch_name() -> str:
     return branch
 
 
-def _current_branch_pr_number() -> int | None:
+def _resolve_pr_lookup_repository() -> tuple[str, str]:
+    payload = _run_json(["gh", "repo", "view", "--json", "nameWithOwner,parent"])
+    if not isinstance(payload, dict):
+        raise ScriptError("Unexpected response from gh repo view")
+
+    current_repo = str(payload.get("nameWithOwner", "")).strip()
+    if "/" not in current_repo:
+        raise ScriptError("Could not determine current repository from gh repo view")
+
+    current_owner = current_repo.split("/", 1)[0]
+
+    parent_repo = ""
+    parent = payload.get("parent")
+    if isinstance(parent, dict):
+        parent_repo = str(parent.get("nameWithOwner", "")).strip()
+
+    lookup_repo = parent_repo or current_repo
+    return lookup_repo, current_owner
+
+
+def _current_branch_pr() -> tuple[int, str] | None:
     branch = _current_branch_name()
-    payload = _run_json(
-        ["gh", "pr", "list", "--state", "open", "--head", branch, "--json", "number"]
-    )
-    if not isinstance(payload, list):
-        raise ScriptError("Unexpected response from gh pr list")
-    if len(payload) == 0:
-        return None
-    first = payload[0]
-    if not isinstance(first, dict):
-        raise ScriptError("Unexpected PR payload from gh pr list")
-    number = first.get("number")
-    if not isinstance(number, int):
-        raise ScriptError("Unexpected PR number from gh pr list")
-    return number
+    lookup_repo, current_owner = _resolve_pr_lookup_repository()
+    head_refs = [f"{current_owner}:{branch}", branch]
+    seen: set[str] = set()
+
+    for head_ref in head_refs:
+        if head_ref in seen:
+            continue
+        seen.add(head_ref)
+
+        payload = _run_json(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--repo",
+                lookup_repo,
+                "--state",
+                "open",
+                "--head",
+                head_ref,
+                "--json",
+                "number",
+            ]
+        )
+        if not isinstance(payload, list):
+            raise ScriptError("Unexpected response from gh pr list")
+        if len(payload) == 0:
+            continue
+        first = payload[0]
+        if not isinstance(first, dict):
+            raise ScriptError("Unexpected PR payload from gh pr list")
+        number = first.get("number")
+        if not isinstance(number, int):
+            raise ScriptError("Unexpected PR number from gh pr list")
+        return number, lookup_repo
+
+    return None
 
 
 def _current_pr_context() -> PullRequestContext | None:
-    pr_number = _current_branch_pr_number()
-    if pr_number is None:
+    current = _current_branch_pr()
+    if current is None:
         return None
+    pr_number, lookup_repo = current
 
-    pr = _run_json(["gh", "pr", "view", str(pr_number), "--json", "number,url,title"])
+    pr = _run_json(
+        [
+            "gh",
+            "pr",
+            "view",
+            str(pr_number),
+            "--repo",
+            lookup_repo,
+            "--json",
+            "number,url,title",
+        ]
+    )
     if not isinstance(pr, dict):
         raise ScriptError("Unexpected response from gh pr view")
     number = int(pr["number"])
@@ -234,7 +289,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--fixed", type=int, required=True)
     parser.add_argument("--deferred", type=int, required=True)
     parser.add_argument("--remaining", type=int, required=True)
-    parser.add_argument("--checks", required=True, help="passed|failed|not_run")
+    parser.add_argument(
+        "--checks",
+        required=True,
+        choices=["passed", "failed", "not_run"],
+        help="passed|failed|not_run",
+    )
     parser.add_argument("--review-ids", default="", help="Comma-separated review IDs")
     parser.add_argument("--notes", default="", help="Optional free-form summary note")
     parser.add_argument(

@@ -51,10 +51,13 @@ def _mock_run_factory():
         if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
             return _Proc(0, "feature/test\n", "")
 
-        if cmd[:9] == ["gh", "pr", "list", "--state", "open", "--head", "feature/test", "--json", "number"]:
+        if cmd[:5] == ["gh", "repo", "view", "--json", "nameWithOwner,parent"]:
+            return _Proc(0, json.dumps({"nameWithOwner": "o/r", "parent": None}), "")
+
+        if cmd[:11] == ["gh", "pr", "list", "--repo", "o/r", "--state", "open", "--head", "o:feature/test", "--json", "number"]:
             return _Proc(0, json.dumps([{"number": 42}]), "")
 
-        if cmd[:4] == ["gh", "pr", "view", "42"] and cmd[4:6] == ["--json", "number,url,title"]:
+        if cmd[:6] == ["gh", "pr", "view", "42", "--repo", "o/r"] and cmd[6:8] == ["--json", "number,url,title"]:
             return _Proc(0, json.dumps({"number": 42, "url": "https://github.com/o/r/pull/42", "title": "Test PR"}), "")
 
         raise AssertionError(f"Unhandled command: {cmd}")
@@ -101,6 +104,26 @@ def test_parse_args_rejects_non_terminal_status():
                 "0",
                 "--checks",
                 "passed",
+            ]
+        )
+
+
+def test_parse_args_rejects_invalid_checks():
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--status",
+                "COMPLETE",
+                "--iterations",
+                "1",
+                "--fixed",
+                "1",
+                "--deferred",
+                "0",
+                "--remaining",
+                "0",
+                "--checks",
+                "maybe",
             ]
         )
 
@@ -271,7 +294,17 @@ def test_main_no_open_pr_returns_zero(mock_run):
             return _Proc(0, "", "")
         if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
             return _Proc(0, "feature/no-pr\n", "")
-        if cmd[:9] == ["gh", "pr", "list", "--state", "open", "--head", "feature/no-pr", "--json", "number"]:
+        if cmd[:5] == ["gh", "repo", "view", "--json", "nameWithOwner,parent"]:
+            return _Proc(
+                0,
+                json.dumps(
+                    {"nameWithOwner": "fork-owner/fork-repo", "parent": {"nameWithOwner": "base/repo"}}
+                ),
+                "",
+            )
+        if cmd[:11] == ["gh", "pr", "list", "--repo", "base/repo", "--state", "open", "--head", "fork-owner:feature/no-pr", "--json", "number"]:
+            return _Proc(0, json.dumps([]), "")
+        if cmd[:11] == ["gh", "pr", "list", "--repo", "base/repo", "--state", "open", "--head", "feature/no-pr", "--json", "number"]:
             return _Proc(0, json.dumps([]), "")
         raise AssertionError(f"Unhandled command: {cmd}")
 
@@ -354,9 +387,17 @@ def test_main_derives_repo_from_pr_url(mock_run):
             return _Proc(0, "", "")
         if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
             return _Proc(0, "feature/cross-repo\n", "")
-        if cmd[:9] == ["gh", "pr", "list", "--state", "open", "--head", "feature/cross-repo", "--json", "number"]:
+        if cmd[:5] == ["gh", "repo", "view", "--json", "nameWithOwner,parent"]:
+            return _Proc(
+                0,
+                json.dumps(
+                    {"nameWithOwner": "fork/repo", "parent": {"nameWithOwner": "base/repo"}}
+                ),
+                "",
+            )
+        if cmd[:11] == ["gh", "pr", "list", "--repo", "base/repo", "--state", "open", "--head", "fork:feature/cross-repo", "--json", "number"]:
             return _Proc(0, json.dumps([{"number": 42}]), "")
-        if cmd[:4] == ["gh", "pr", "view", "42"] and cmd[4:6] == ["--json", "number,url,title"]:
+        if cmd[:6] == ["gh", "pr", "view", "42", "--repo", "base/repo"] and cmd[6:8] == ["--json", "number,url,title"]:
             return _Proc(0, json.dumps({"number": 42, "url": "https://github.com/base/repo/pull/42", "title": "Cross-repo PR"}), "")
         raise AssertionError(f"Unhandled command: {cmd}")
 
