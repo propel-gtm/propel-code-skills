@@ -60,7 +60,7 @@ Final states:
 
 ## GitHub PR Bridge
 
-At the end of each CARL run (for all final states), publish a PR summary comment
+When CARL reaches a terminal stop condition (`COMPLETE`, `BLOCKED`, or `MAX_ITERATIONS_REACHED`), publish a PR summary comment
 using:
 
 ```bash

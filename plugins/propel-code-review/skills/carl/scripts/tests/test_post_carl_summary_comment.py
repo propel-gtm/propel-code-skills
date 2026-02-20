@@ -82,6 +82,66 @@ def test_parse_review_ids():
     assert _parse_review_ids("a,b,, c ") == ["a", "b", "c"]
 
 
+def test_parse_args_rejects_non_terminal_status():
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--status",
+                "RUNNING",
+                "--iterations",
+                "1",
+                "--fixed",
+                "1",
+                "--deferred",
+                "0",
+                "--remaining",
+                "0",
+                "--checks",
+                "passed",
+            ]
+        )
+
+
+def test_main_complete_requires_zero_remaining():
+    rc = main(
+        [
+            "--status",
+            "COMPLETE",
+            "--iterations",
+            "1",
+            "--fixed",
+            "1",
+            "--deferred",
+            "0",
+            "--remaining",
+            "1",
+            "--checks",
+            "passed",
+        ]
+    )
+    assert rc == 1
+
+
+def test_main_non_complete_requires_non_zero_remaining():
+    rc = main(
+        [
+            "--status",
+            "BLOCKED",
+            "--iterations",
+            "3",
+            "--fixed",
+            "1",
+            "--deferred",
+            "1",
+            "--remaining",
+            "0",
+            "--checks",
+            "failed",
+        ]
+    )
+    assert rc == 1
+
+
 @patch("subprocess.run")
 def test_main_dry_run(mock_run):
     runner, state = _mock_run_factory()

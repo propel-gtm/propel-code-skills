@@ -76,7 +76,7 @@ Use `carl` to repeatedly run `propel-code-review` and address valid comments unt
 ```
 
 ```text
-Use `carl` and publish a sticky GitHub PR summary comment after each run with counts of fixed/deferred/remaining comments.
+Use `carl` and publish a sticky GitHub PR summary comment only when the loop reaches a terminal stop condition (COMPLETE, BLOCKED, or MAX_ITERATIONS_REACHED), with counts of fixed/deferred/remaining comments.
 ```
 
 ```text
@@ -85,7 +85,7 @@ Use `propel-address-pr-comments` to find the open PR for the current branch, fet
 
 ## CARL PR Summary Comment
 
-CARL can publish/update a sticky summary comment on the open PR using Propel Review API.
+CARL can publish/update a sticky summary comment on the open PR using Propel Review API, but this should run once at terminal stop condition only.
 This keeps the comment author as Propel Bot (instead of local `gh` user identity).
 
 ```bash
