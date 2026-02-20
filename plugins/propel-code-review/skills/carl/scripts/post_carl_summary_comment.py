@@ -298,7 +298,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.status == "COMPLETE" and args.remaining != 0:
             raise ScriptError("status COMPLETE requires --remaining 0")
-        if args.status in {"BLOCKED", "MAX_ITERATIONS_REACHED"} and args.remaining == 0:
+        if args.status in {"BLOCKED", "MAX_ITERATIONS_REACHED"} and args.remaining <= 0:
             raise ScriptError(f"status {args.status} requires --remaining greater than 0")
 
         _ensure_gh_authenticated()

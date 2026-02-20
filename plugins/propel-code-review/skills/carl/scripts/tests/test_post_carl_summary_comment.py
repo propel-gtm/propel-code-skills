@@ -168,6 +168,26 @@ def test_main_non_complete_requires_non_zero_remaining():
     assert rc == 1
 
 
+def test_main_non_complete_rejects_negative_remaining():
+    rc = main(
+        [
+            "--status",
+            "MAX_ITERATIONS_REACHED",
+            "--iterations",
+            "3",
+            "--fixed",
+            "1",
+            "--deferred",
+            "1",
+            "--remaining",
+            "-1",
+            "--checks",
+            "failed",
+        ]
+    )
+    assert rc == 1
+
+
 @patch("subprocess.run")
 def test_main_dry_run(mock_run):
     runner, state = _mock_run_factory()
