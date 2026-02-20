@@ -17,8 +17,13 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from urllib.parse import urlparse
 from typing import Any
+
+SKILLS_DIR = Path(__file__).resolve().parents[2]
+if str(SKILLS_DIR) not in sys.path:
+    sys.path.insert(0, str(SKILLS_DIR))
 
 from command_helpers import CommandError, run_cmd, run_json
 
