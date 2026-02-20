@@ -78,3 +78,16 @@ Use `carl` to repeatedly run `propel-code-review` and address valid comments unt
 ```text
 Use `propel-address-pr-comments` to find the open PR for the current branch, choose mode (`ALL_COMMENTS`, `AGENT_DECIDES`, or `HUMAN_SELECTS`), and apply fixes for selected findings.
 ```
+
+## Permission Smoke Test
+
+From a target repository (for example, `propel-gtm`), run:
+
+```bash
+/path/to/propel-code-skills/plugins/propel-code-review/skills/propel-code-review/scripts/smoke_test_permissions.sh
+```
+
+This checks:
+- good token + good repo (`202`)
+- good token + bad repo (`404`)
+- bad token + good repo (`401/403`)

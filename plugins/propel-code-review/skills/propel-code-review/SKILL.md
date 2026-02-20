@@ -12,6 +12,19 @@ Always target the production API unless told otherwise.
 
 Run async, diff-based code reviews via the production API and retrieve comments.
 
+## Quick Permission Check
+
+Before rollout to a new workspace/repo, run this from the target repository root:
+
+```bash
+/path/to/propel-code-skills/plugins/propel-code-review/skills/propel-code-review/scripts/smoke_test_permissions.sh
+```
+
+It validates:
+- good token + connected repo
+- good token + unconnected repo
+- invalid token + connected repo
+
 ## Pre-flight: Verify API Key
 
 **Before making any API call**, check whether `PROPEL_API_KEY` is set:
@@ -179,13 +192,18 @@ Response (200):
    - `git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\\.git$//'`
 4. Generate the diff:
    - `git diff "$BASE_BRANCH"`
-5. Call `POST /v1/reviews` with the diff, base commit, and repository using the canonical repo slug.
-6. Poll `GET /v1/reviews/:review_id` every 30 seconds until status is `completed` or `failed`.
-7. Present comments to the user with file/line context.
-8. For each comment, determine whether it is valid and applicable to the code.
-9. If valid, incorporate the change in the codebase. If invalid, do not change
+5. Call `POST /v1/reviews` with the diff, base commit, and repository using the canonical repo slug, and capture both HTTP status and response body.
+6. Handle create-review failures before polling:
+   - `401/403`: token invalid/expired/missing scope. Stop and ask user to refresh token.
+   - `404`: repository is not connected to the Propel workspace (or slug is wrong). Stop and ask user to connect/fix repo slug.
+   - `400/413`: invalid request or diff too large. Stop and show actionable fix.
+   - `5xx`: transient API error. Retry with bounded backoff, then stop and report if still failing.
+7. Poll `GET /v1/reviews/:review_id` every 30 seconds until status is `completed` or `failed`.
+8. Present comments to the user with file/line context.
+9. For each comment, determine whether it is valid and applicable to the code.
+10. If valid, incorporate the change in the codebase. If invalid, do not change
    the codebase.
-10. Immediately call `POST /v1/reviews/:review_id/comments/feedback` for each
+11. Immediately call `POST /v1/reviews/:review_id/comments/feedback` for each
    comment with the `comment_id` and `incorporated` true/false, plus brief
    `notes` explaining the decision. Do not wait for user confirmation.
 
@@ -233,8 +251,19 @@ done
   expired, or missing scopes. Guide the user to generate a new one at:
   https://app.propelcode.ai/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write
 - `404 {"error":"Repository not found"}` — the repository string does not match
-  a repo connected to the account.
+  a repo connected to the account. Treat this as an access/config problem, not a retryable failure.
 - `413` — the diff exceeded the 1,000,000 byte limit.
+
+## Permission Handling Contract
+
+If review creation returns `401`, `403`, or `404`, do all of the following:
+
+1. Stop the review flow immediately (do not poll and do not retry in a loop).
+2. Report the exact repository slug used.
+3. Report an actionable next step:
+   - `401/403`: "refresh token and confirm `reviews:read` + `reviews:write` scopes".
+   - `404`: "connect this repository in Propel workspace, or correct owner/repo slug".
+4. Mark the run as blocked until user intervention.
 
 ## Notes for Agents
 
