@@ -27,7 +27,6 @@ import os
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 from urllib import error as urlerror
 from urllib import parse as urlparse
@@ -42,11 +41,7 @@ class ScriptError(RuntimeError):
     """Script-level failure with actionable message."""
 
 
-# Reuse shared command helpers used by other Propel skills to avoid drift.
-_SHARED_HELPERS_DIR = Path(__file__).resolve().parents[2] / "propel-address-pr-comments" / "scripts"
-if str(_SHARED_HELPERS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SHARED_HELPERS_DIR))
-from command_helpers import CommandError, run_cmd, run_json  # noqa: E402
+from command_helpers import CommandError, run_cmd, run_json
 
 
 def _run(cmd: list[str], stdin: str | None = None) -> str:
