@@ -24,10 +24,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from urllib import error as urlerror
 from urllib import parse as urlparse
@@ -42,33 +42,25 @@ class ScriptError(RuntimeError):
     """Script-level failure with actionable message."""
 
 
+# Reuse shared command helpers used by other Propel skills to avoid drift.
+_SHARED_HELPERS_DIR = Path(__file__).resolve().parents[2] / "propel-address-pr-comments" / "scripts"
+if str(_SHARED_HELPERS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SHARED_HELPERS_DIR))
+from command_helpers import CommandError, run_cmd, run_json  # noqa: E402
+
+
 def _run(cmd: list[str], stdin: str | None = None) -> str:
     try:
-        proc = subprocess.run(
-            cmd,
-            input=stdin,
-            capture_output=True,
-            text=True,
-            timeout=COMMAND_TIMEOUT_SECONDS,
-        )
-    except FileNotFoundError as exc:
-        raise ScriptError(f"Command not found: {cmd[0]}") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise ScriptError(
-            f"Command timed out after {COMMAND_TIMEOUT_SECONDS}s: {' '.join(cmd)}"
-        ) from exc
-
-    if proc.returncode != 0:
-        raise ScriptError(f"Command failed: {' '.join(cmd)}\n{proc.stderr.strip()}")
-    return proc.stdout
+        return run_cmd(cmd, stdin=stdin, timeout_seconds=COMMAND_TIMEOUT_SECONDS)
+    except CommandError as exc:
+        raise ScriptError(str(exc)) from exc
 
 
 def _run_json(cmd: list[str], stdin: str | None = None) -> dict[str, Any] | list[Any]:
-    out = _run(cmd, stdin=stdin)
     try:
-        return json.loads(out)
-    except json.JSONDecodeError as exc:
-        raise ScriptError(f"Invalid JSON output from command: {' '.join(cmd)}") from exc
+        return run_json(cmd, stdin=stdin, timeout_seconds=COMMAND_TIMEOUT_SECONDS)
+    except CommandError as exc:
+        raise ScriptError(str(exc)) from exc
 
 
 def _ensure_gh_authenticated() -> None:

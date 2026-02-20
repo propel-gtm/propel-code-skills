@@ -16,10 +16,11 @@ Usage:
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from urllib.parse import urlparse
 from typing import Any
+
+from command_helpers import CommandError, run_cmd, run_json
 
 COMMAND_TIMEOUT_SECONDS = 120
 
@@ -94,47 +95,23 @@ query(
 }
 """
 
-
-def _run(cmd: list[str], stdin: str | None = None) -> str:
-    try:
-        p = subprocess.run(
-            cmd,
-            input=stdin,
-            capture_output=True,
-            text=True,
-            timeout=COMMAND_TIMEOUT_SECONDS,
-        )
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"Command not found: {cmd[0]}") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            f"Command timed out after {COMMAND_TIMEOUT_SECONDS}s: {' '.join(cmd)}"
-        ) from exc
-
-    if p.returncode != 0:
-        raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{p.stderr}")
-    return p.stdout
-
-
-def _run_json(cmd: list[str], stdin: str | None = None) -> dict[str, Any]:
-    out = _run(cmd, stdin=stdin)
-    try:
-        return json.loads(out)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"Failed to parse JSON from command output: {e}\nRaw:\n{out}") from e
-
-
 def _ensure_gh_authenticated() -> None:
     try:
-        _run(["gh", "auth", "status"])
-    except RuntimeError:
+        run_cmd(["gh", "auth", "status"], timeout_seconds=COMMAND_TIMEOUT_SECONDS)
+    except CommandError:
         print("run `gh auth login` to authenticate the GitHub CLI", file=sys.stderr)
         raise RuntimeError("gh auth status failed; run `gh auth login` to authenticate the GitHub CLI") from None
 
 
 def gh_pr_view_json(fields: str) -> dict[str, Any]:
     # fields is a comma-separated list like: "number,headRepositoryOwner,headRepository"
-    return _run_json(["gh", "pr", "view", "--json", fields])
+    payload = run_json(
+        ["gh", "pr", "view", "--json", fields],
+        timeout_seconds=COMMAND_TIMEOUT_SECONDS,
+    )
+    if not isinstance(payload, dict):
+        raise RuntimeError("Unexpected response from gh pr view")
+    return payload
 
 
 def get_current_pr_ref() -> tuple[str, str, int]:
@@ -186,7 +163,10 @@ def gh_api_graphql(
     if threads_cursor:
         cmd += ["-F", f"threadsCursor={threads_cursor}"]
 
-    return _run_json(cmd, stdin=QUERY)
+    payload = run_json(cmd, stdin=QUERY, timeout_seconds=COMMAND_TIMEOUT_SECONDS)
+    if not isinstance(payload, dict):
+        raise RuntimeError("Unexpected response from gh api graphql")
+    return payload
 
 
 def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
