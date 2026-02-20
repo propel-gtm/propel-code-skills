@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 from urllib import error as urlerror
+from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 COMMAND_TIMEOUT_SECONDS = 120
@@ -39,11 +40,6 @@ DEFAULT_PROPEL_API_BASE_URL = "https://api.propelcode.ai"
 
 class ScriptError(RuntimeError):
     """Script-level failure with actionable message."""
-
-
-def _is_no_open_pr_error(error: ScriptError) -> bool:
-    msg = str(error).lower()
-    return "no pull requests found" in msg
 
 
 def _run(cmd: list[str], stdin: str | None = None) -> str:
@@ -67,7 +63,7 @@ def _run(cmd: list[str], stdin: str | None = None) -> str:
     return proc.stdout
 
 
-def _run_json(cmd: list[str], stdin: str | None = None) -> dict[str, Any]:
+def _run_json(cmd: list[str], stdin: str | None = None) -> dict[str, Any] | list[Any]:
     out = _run(cmd, stdin=stdin)
     try:
         return json.loads(out)
@@ -87,12 +83,41 @@ class PullRequestContext:
     repo: str
 
 
-def _current_pr_context() -> PullRequestContext:
-    pr = _run_json(["gh", "pr", "view", "--json", "number,url,title"])
+def _repo_slug_from_pr_url(url: str) -> str:
+    parsed = urlparse.urlparse(url)
+    parts = [p for p in parsed.path.split("/") if p]
+    if len(parts) >= 4 and parts[2] == "pull":
+        return f"{parts[0]}/{parts[1]}"
+    raise ScriptError(f"Could not derive repository slug from PR URL: {url}")
+
+
+def _current_branch_pr_number() -> int | None:
+    payload = _run_json(["gh", "pr", "status", "--json", "currentBranch"])
+    if not isinstance(payload, dict):
+        raise ScriptError("Unexpected response from gh pr status")
+    current_branch = payload.get("currentBranch")
+    if current_branch is None:
+        return None
+    if not isinstance(current_branch, dict):
+        raise ScriptError("Unexpected currentBranch payload from gh pr status")
+    number = current_branch.get("number")
+    if not isinstance(number, int):
+        raise ScriptError("Unexpected PR number from gh pr status")
+    return number
+
+
+def _current_pr_context() -> PullRequestContext | None:
+    pr_number = _current_branch_pr_number()
+    if pr_number is None:
+        return None
+
+    pr = _run_json(["gh", "pr", "view", str(pr_number), "--json", "number,url,title"])
+    if not isinstance(pr, dict):
+        raise ScriptError("Unexpected response from gh pr view")
     number = int(pr["number"])
     url = str(pr["url"])
     title = str(pr.get("title", ""))
-    repo = _run(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]).strip()
+    repo = _repo_slug_from_pr_url(url)
     return PullRequestContext(number=number, url=url, title=title, repo=repo)
 
 
@@ -220,13 +245,10 @@ def main(argv: list[str] | None = None) -> int:
             raise ScriptError(f"status {args.status} requires --remaining greater than 0")
 
         _ensure_gh_authenticated()
-        try:
-            pr = _current_pr_context()
-        except ScriptError as exc:
-            if _is_no_open_pr_error(exc):
-                print("No open PR found for current branch; skipping CARL summary comment publish.")
-                return 0
-            raise
+        pr = _current_pr_context()
+        if pr is None:
+            print("No open PR found for current branch; skipping CARL summary comment publish.")
+            return 0
         review_ids = _parse_review_ids(args.review_ids)
         body = build_comment_body(
             status=args.status,

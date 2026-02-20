@@ -48,11 +48,11 @@ def _mock_run_factory():
         if cmd[:3] == ["gh", "auth", "status"]:
             return _Proc(0, "", "")
 
-        if cmd[:4] == ["gh", "pr", "view", "--json"]:
-            return _Proc(0, json.dumps({"number": 42, "url": "https://github.com/o/r/pull/42", "title": "Test PR"}), "")
+        if cmd[:5] == ["gh", "pr", "status", "--json", "currentBranch"]:
+            return _Proc(0, json.dumps({"currentBranch": {"number": 42}}), "")
 
-        if cmd[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]:
-            return _Proc(0, "owner/repo\n", "")
+        if cmd[:4] == ["gh", "pr", "view", "42"] and cmd[4:6] == ["--json", "number,url,title"]:
+            return _Proc(0, json.dumps({"number": 42, "url": "https://github.com/o/r/pull/42", "title": "Test PR"}), "")
 
         raise AssertionError(f"Unhandled command: {cmd}")
 
@@ -266,8 +266,8 @@ def test_main_no_open_pr_returns_zero(mock_run):
         state["calls"].append(cmd)
         if cmd[:3] == ["gh", "auth", "status"]:
             return _Proc(0, "", "")
-        if cmd[:4] == ["gh", "pr", "view", "--json"]:
-            return _Proc(1, "", 'no pull requests found for branch "main"')
+        if cmd[:5] == ["gh", "pr", "status", "--json", "currentBranch"]:
+            return _Proc(0, json.dumps({"currentBranch": None}), "")
         raise AssertionError(f"Unhandled command: {cmd}")
 
     mock_run.side_effect = runner
@@ -337,6 +337,49 @@ def test_post_summary_via_propel_api_success():
     assert payload["repository"] == "owner/repo"
     assert payload["pr_number"] == 42
     assert payload["marker"] == MARKER
+
+
+@patch("subprocess.run")
+def test_main_derives_repo_from_pr_url(mock_run):
+    state = {"calls": []}
+
+    def runner(cmd, input=None, capture_output=True, text=True, timeout=120):  # noqa: ARG001
+        state["calls"].append(cmd)
+        if cmd[:3] == ["gh", "auth", "status"]:
+            return _Proc(0, "", "")
+        if cmd[:5] == ["gh", "pr", "status", "--json", "currentBranch"]:
+            return _Proc(0, json.dumps({"currentBranch": {"number": 42}}), "")
+        if cmd[:4] == ["gh", "pr", "view", "42"] and cmd[4:6] == ["--json", "number,url,title"]:
+            return _Proc(0, json.dumps({"number": 42, "url": "https://github.com/base/repo/pull/42", "title": "Cross-repo PR"}), "")
+        raise AssertionError(f"Unhandled command: {cmd}")
+
+    mock_run.side_effect = runner
+
+    with patch.dict(os.environ, {"PROPEL_API_KEY": "rev_test_key"}):
+        with patch(
+            "post_carl_summary_comment._post_summary_via_propel_api",
+            return_value={"action": "created", "comment_id": "1001"},
+        ) as mock_post:
+            rc = main(
+                [
+                    "--status",
+                    "BLOCKED",
+                    "--iterations",
+                    "1",
+                    "--fixed",
+                    "0",
+                    "--deferred",
+                    "1",
+                    "--remaining",
+                    "1",
+                    "--checks",
+                    "failed",
+                ]
+            )
+
+    assert rc == 0
+    assert mock_post.call_count == 1
+    assert mock_post.call_args.kwargs["repository"] == "base/repo"
 
 
 def test_post_summary_via_propel_api_http_error():
