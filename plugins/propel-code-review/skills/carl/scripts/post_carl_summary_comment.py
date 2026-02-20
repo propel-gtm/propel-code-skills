@@ -27,7 +27,6 @@ import os
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 from urllib import error as urlerror
 from urllib import parse as urlparse
@@ -41,10 +40,6 @@ DEFAULT_PROPEL_API_BASE_URL = "https://api.propelcode.ai"
 class ScriptError(RuntimeError):
     """Script-level failure with actionable message."""
 
-
-SKILLS_DIR = Path(__file__).resolve().parents[2]
-if str(SKILLS_DIR) not in sys.path:
-    sys.path.insert(0, str(SKILLS_DIR))
 
 from command_helpers import CommandError, run_cmd, run_json
 
