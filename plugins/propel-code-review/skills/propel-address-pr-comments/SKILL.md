@@ -13,11 +13,12 @@ Guide to find the open PR for the current branch and address its comments with g
 
 Execution order:
 1. Fetch Propel-authored comments first, then classify each item as `active`, `outdated`, or `resolved/non-actionable`.
-2. Filter out `outdated` and `resolved/non-actionable` items before presenting the user-facing comment inventory.
-3. Then ask the mode question (unless the user already explicitly chose mode).
-4. Do not silently default to a mode when user intent is missing.
-5. If the user response is ambiguous, ask one focused clarification and wait.
-6. Once a mode is chosen, restate it in a one-line execution plan before editing.
+2. Run a PR-head sync check before asking mode or applying edits.
+3. Filter out `outdated` and `resolved/non-actionable` items before presenting the user-facing comment inventory.
+4. Then ask the mode question (unless the user already explicitly chose mode).
+5. Do not silently default to a mode when user intent is missing.
+6. If the user response is ambiguous, ask one focused clarification and wait.
+7. Once a mode is chosen, restate it in a one-line execution plan before editing.
 
 Supported modes:
 - `ALL_COMMENTS`: Address all eligible Propel-authored comments.
@@ -51,7 +52,17 @@ Prerequisites:
 ## 1) Inspect comments needing attention
 - Run scripts/fetch_comments.py which will print out all the comments and review threads on the PR
 
-## 2) Build candidate findings set
+## 2) PR-head sync check (required before edits)
+- Compare:
+  - local HEAD: `git rev-parse HEAD`
+  - PR head SHA: `pull_request.head_ref_oid` from `fetch_comments.py` output
+- If SHAs match: proceed normally.
+- If SHAs differ, determine relation and act:
+  - Local ahead of PR head (un-pushed local commits): pause and warn that comments are based on older PR code; ask user whether to push/re-fetch first or continue knowingly.
+  - Local behind PR head or diverged: do not edit yet; ask user to sync local branch to PR head and then re-run comment fetch.
+- Include one-line sync status in the pre-edit execution plan (`synced` or `stale`).
+
+## 3) Build candidate findings set
 - Filter to eligible comments based on scope rules above.
 - Use thread status from GitHub (`isOutdated`, `isResolved`) or `status` from `fetch_comments.py` to classify review-thread items:
   - `active`: potentially actionable
@@ -68,7 +79,7 @@ Prerequisites:
 - Only show outdated/resolved details if the user explicitly asks for diagnostics.
 - If there are no eligible comments, report that and stop.
 
-## 3) Ask for mode (after showing comments)
+## 4) Ask for mode (after showing comments)
 - If the user already explicitly chose a mode in the current request, use it and skip this question.
 - Otherwise ask using this exact structure:
 ```text
@@ -79,9 +90,9 @@ How should I handle Propel comments for this PR?
 Reply with 1, 2, or 3.
 ```
 - Before making any code edits, state the execution plan in one line:
-  - `mode`, and that user can reply `change mode` to override.
+  - `mode`, sync status, and that user can reply `change mode` to override.
 
-## 4) Execute by mode
+## 5) Execute by mode
 
 ### `ALL_COMMENTS`
 - Address all eligible actionable (`active`) Propel-authored comments.
@@ -102,9 +113,10 @@ Reply with 1, 2, or 3.
 - Ask the user which numbered comments should be addressed.
 - Select the chosen comments for implementation.
 
-## 5) Apply fixes and report
+## 6) Apply fixes and report
 - Implement approved comments according to mode outcome.
 - Summarize:
+  - sync status used for this run
   - mode used
   - internal severity policy used (if `AGENT_DECIDES`)
   - count fixed

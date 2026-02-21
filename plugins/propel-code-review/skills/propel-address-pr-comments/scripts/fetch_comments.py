@@ -38,6 +38,8 @@ query(
       url
       title
       state
+      headRefName
+      headRefOid
 
       # Top-level "Conversation" comments (issue comments on the PR)
       comments(first: 100, after: $commentsCursor) {
@@ -240,6 +242,8 @@ def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
                 "url": pr["url"],
                 "title": pr["title"],
                 "state": pr["state"],
+                "head_ref_name": pr["headRefName"],
+                "head_ref_oid": pr["headRefOid"],
                 "owner": owner,
                 "repo": repo,
             }
