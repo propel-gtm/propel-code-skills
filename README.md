@@ -76,5 +76,5 @@ Use `carl` to repeatedly run `propel-code-review` and address valid comments unt
 ```
 
 ```text
-Use `propel-address-pr-comments` to find the open PR for the current branch, fetch Propel findings, ask which comments to address, and apply fixes for selected findings.
+Use `propel-address-pr-comments` to find the open PR for the current branch, choose mode (`ALL_COMMENTS`, `AGENT_DECIDES`, or `HUMAN_SELECTS`), and apply fixes for selected findings.
 ```
