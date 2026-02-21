@@ -12,8 +12,8 @@ Guide to find the open PR for the current branch and address its comments with g
 ## 0) Execution order (fetch first, then ask mode)
 
 Execution order:
-1. Fetch and filter Propel-authored comments first.
-2. Present the standardized comment inventory so the user can see all comments.
+1. Fetch Propel-authored comments first, then classify each item as `active`, `outdated`, or `resolved/non-actionable`.
+2. Filter out `outdated` and `resolved/non-actionable` items before presenting the user-facing comment inventory.
 3. Then ask the mode question (unless the user already explicitly chose mode).
 4. Do not silently default to a mode when user intent is missing.
 5. If the user response is ambiguous, ask one focused clarification and wait.
@@ -53,12 +53,19 @@ Prerequisites:
 
 ## 2) Build candidate findings set
 - Filter to eligible comments based on scope rules above.
+- Use thread status from GitHub (`isOutdated`, `isResolved`) or `status` from `fetch_comments.py` to classify review-thread items:
+  - `active`: potentially actionable
+  - `outdated`: no longer mapped to current diff context, not actionable by default
+  - `resolved`: already handled, not actionable by default
+- Build the actionable set from `active` items only.
+- Exclude `outdated` and `resolved/non-actionable` items from the user-visible list and numbering by default.
 - Always present the comment inventory in this standardized format, regardless of PR size:
-  - First line: `I found <N> Propel comments.`
-  - Then list every eligible comment as a numbered bullet.
-  - Bullet format: `[<severity>] <file-or-thread-location> - <very concise summary>`
-  - Summary should be just a few words (target 3-8 words).
+  - First line: `I found <N_actionable> Propel comments.`
+  - Then list every actionable comment as a numbered bullet.
+  - Bullet format: `[<severity>] <file-or-thread-location> - <bug summary> (why: <likely cause>)`
+  - Keep both `<bug summary>` and `why` concise.
 - If a comment has no structured severity, infer severity first and then use the same format.
+- Only show outdated/resolved details if the user explicitly asks for diagnostics.
 - If there are no eligible comments, report that and stop.
 
 ## 3) Ask for mode (after showing comments)
@@ -77,19 +84,21 @@ Reply with 1, 2, or 3.
 ## 4) Execute by mode
 
 ### `ALL_COMMENTS`
-- Address all eligible actionable Propel-authored comments.
-- Defer non-actionable items (for example approvals/LGTM-only comments) with short reasons.
+- Address all eligible actionable (`active`) Propel-authored comments.
+- Do not implement `outdated` or `resolved/non-actionable` items unless user explicitly asks.
+- Defer non-actionable items (for example approvals/LGTM-only comments and outdated threads) with short reasons.
 
 ### `AGENT_DECIDES`
 - For each eligible comment:
   - Decide whether it is valid and applicable to this codebase.
   - Determine (or infer) severity.
   - Include the comment for implementation using the internal triage policy above.
-- Defer comments that are low-confidence, duplicate, outdated, non-applicable, or intentionally out of policy.
+- Defer comments that are low-confidence, duplicate, outdated, resolved/non-actionable, non-applicable, or intentionally out of policy.
 - Keep a short reason for each deferred comment.
 
 ### `HUMAN_SELECTS`
-- Number all eligible comments and provide a short implementation summary for each.
+- Number only `active` eligible comments and provide a short implementation summary for each.
+- Do not show `outdated` items unless the user explicitly asks for diagnostics.
 - Ask the user which numbered comments should be addressed.
 - Select the chosen comments for implementation.
 
@@ -103,3 +112,4 @@ Reply with 1, 2, or 3.
 
 Notes:
 - If gh hits auth/rate issues mid-run, prompt the user to re-authenticate with `gh auth login`, then retry.
+- Why outdated comments can appear: GitHub review threads remain in PR history even after code changes, and `fetch_comments.py` returns those threads with `isOutdated=true`. Treat these as non-actionable by default and exclude them from the user-visible actionable list/count unless diagnostics are requested.
