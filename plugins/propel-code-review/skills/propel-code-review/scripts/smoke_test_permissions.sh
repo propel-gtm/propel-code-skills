@@ -42,7 +42,7 @@ require_option_value() {
   local value="${2-}"
   if [[ -z "$value" || "$value" == --* ]]; then
     echo "Missing value for $opt" >&2
-    usage
+    usage >&2
     exit 1
   fi
   printf '%s\n' "$value"
@@ -68,7 +68,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "Unknown argument: $1" >&2
-      usage
+      usage >&2
       exit 1
       ;;
   esac
@@ -84,7 +84,7 @@ if [[ -z "$BASE_BRANCH" ]]; then
 fi
 
 if [[ -z "$REPO_SLUG" ]]; then
-  REPO_SLUG="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || git remote get-url origin 2>/dev/null | sed -E 's#.*[:/]([^/]+/[^/]+?)(\.git)?$#\1#' || true)"
+  REPO_SLUG="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || git remote get-url origin 2>/dev/null | sed -E 's/\.git$//; s#.*[:/]([^/]+/[^/]+)$#\1#' || true)"
 fi
 
 if [[ -z "$BASE_BRANCH" ]]; then

@@ -215,23 +215,56 @@ BASE_COMMIT=$(git rev-parse "$BASE_BRANCH")
 REPO_SLUG=$(git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\\.git$//')
 git diff "$BASE_BRANCH" > /tmp/review_api.diff
 
-CREATE_RESPONSE=$(curl -s \
-  -H "Authorization: Bearer $PROPEL_API_KEY" \
-  -H "Content-Type: application/json" \
-  --data-binary @<(jq -n --arg diff "$(cat /tmp/review_api.diff)" \
-                    --arg repo "$REPO_SLUG" \
-                    --arg base "$BASE_COMMIT" \
-                    '{diff:$diff, repository:$repo, base_commit:$base}') \
-  https://api.propelcode.ai/v1/reviews)
+CREATE_BODY_FILE=$(mktemp)
+CREATE_STATUS=$(jq -n --rawfile diff /tmp/review_api.diff \
+                     --arg repo "$REPO_SLUG" \
+                     --arg base "$BASE_COMMIT" \
+                     '{diff:$diff, repository:$repo, base_commit:$base}' \
+  | curl -sS -o "$CREATE_BODY_FILE" -w "%{http_code}" \
+      -H "Authorization: Bearer $PROPEL_API_KEY" \
+      -H "Content-Type: application/json" \
+      --data-binary @- \
+      https://api.propelcode.ai/v1/reviews)
 
-REVIEW_ID=$(echo "$CREATE_RESPONSE" | jq -r '.review_id')
-if [ -z "$REVIEW_ID" ] || [ "$REVIEW_ID" = "null" ]; then
-  echo "$CREATE_RESPONSE"
+case "$CREATE_STATUS" in
+  202)
+    ;;
+  401|403)
+    echo "Review create failed ($CREATE_STATUS): refresh token and confirm scopes reviews:read + reviews:write."
+    cat "$CREATE_BODY_FILE"
+    exit 1
+    ;;
+  404)
+    echo "Review create failed (404): connect repository in Propel workspace or correct owner/repo slug ($REPO_SLUG)."
+    cat "$CREATE_BODY_FILE"
+    exit 1
+    ;;
+  400|413)
+    echo "Review create failed ($CREATE_STATUS): fix request payload (or reduce diff size for 413)."
+    cat "$CREATE_BODY_FILE"
+    exit 1
+    ;;
+  5??)
+    echo "Review create failed ($CREATE_STATUS): transient Propel API error; retry with bounded backoff."
+    cat "$CREATE_BODY_FILE"
+    exit 1
+    ;;
+  *)
+    echo "Review create failed ($CREATE_STATUS)."
+    cat "$CREATE_BODY_FILE"
+    exit 1
+    ;;
+esac
+
+REVIEW_ID=$(jq -r '.review_id // empty' "$CREATE_BODY_FILE")
+rm -f "$CREATE_BODY_FILE"
+if [ -z "$REVIEW_ID" ]; then
+  echo "Review create succeeded but review_id is missing"
   exit 1
 fi
 
 while true; do
-  REVIEW_RESPONSE=$(curl -s \
+  REVIEW_RESPONSE=$(curl -sS \
     -H "Authorization: Bearer $PROPEL_API_KEY" \
     "https://api.propelcode.ai/v1/reviews/$REVIEW_ID")
 
