@@ -85,6 +85,13 @@ def _current_branch_name() -> str:
     return branch
 
 
+def _head_commit_sha() -> str:
+    sha = _run(["git", "rev-parse", "HEAD"]).strip()
+    if sha == "":
+        raise ScriptError("Could not determine HEAD commit SHA")
+    return sha
+
+
 def _resolve_pr_lookup_repository() -> tuple[str, str]:
     payload = _run_json(["gh", "repo", "view", "--json", "nameWithOwner,parent"])
     if not isinstance(payload, dict):
@@ -171,6 +178,11 @@ def _current_pr_context() -> PullRequestContext | None:
     title = str(pr.get("title", ""))
     repo = _repo_slug_from_pr_url(url)
     return PullRequestContext(number=number, url=url, title=title, repo=repo)
+
+
+def _repository_for_pending_carl_run() -> str:
+    lookup_repo, _ = _resolve_pr_lookup_repository()
+    return lookup_repo
 
 
 def _propel_api_key() -> str:
@@ -263,6 +275,71 @@ def _post_summary_via_propel_api(*, api_base_url: str, api_key: str, repository:
     return data
 
 
+def _post_pending_run_via_propel_api(
+    *,
+    api_base_url: str,
+    api_key: str,
+    repository: str,
+    branch: str,
+    head_commit_sha: str,
+    status: str,
+    base: str,
+    iterations: int,
+    fixed: int,
+    deferred: int,
+    remaining: int,
+    checks: str,
+    review_ids: list[str],
+    notes: str | None,
+    marker: str,
+    body: str,
+) -> dict[str, Any]:
+    payload = {
+        "repository": repository,
+        "branch": branch,
+        "head_commit_sha": head_commit_sha,
+        "base_branch": base,
+        "status": status,
+        "iterations": iterations,
+        "fixed": fixed,
+        "deferred": deferred,
+        "remaining": remaining,
+        "checks": checks,
+        "review_ids": review_ids,
+        "notes": notes or "",
+        "marker": marker,
+        "body": body,
+    }
+    req = urlrequest.Request(
+        url=f"{api_base_url}/v1/reviews/carl-runs",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+
+    try:
+        with urlrequest.urlopen(req, timeout=COMMAND_TIMEOUT_SECONDS) as resp:
+            response_text = resp.read().decode("utf-8")
+    except urlerror.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace").strip()
+        detail = error_body if error_body else str(exc.reason)
+        raise ScriptError(f"Propel API request failed ({exc.code}): {detail}") from exc
+    except urlerror.URLError as exc:
+        raise ScriptError(f"Failed to reach Propel API: {exc.reason}") from exc
+
+    try:
+        data = json.loads(response_text)
+    except json.JSONDecodeError as exc:
+        raise ScriptError("Invalid JSON response from Propel API") from exc
+    if not isinstance(data, dict):
+        raise ScriptError("Unexpected response from Propel API")
+    return data
+
+
 def _parse_review_ids(raw: str) -> list[str]:
     values = [x.strip() for x in raw.split(",")]
     return [x for x in values if x]
@@ -301,11 +378,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.status in {"BLOCKED", "MAX_ITERATIONS_REACHED"} and args.remaining <= 0:
             raise ScriptError(f"status {args.status} requires --remaining greater than 0")
 
-        _ensure_gh_authenticated()
-        pr = _current_pr_context()
-        if pr is None:
-            print("No open PR found for current branch; skipping CARL summary comment publish.")
-            return 0
         review_ids = _parse_review_ids(args.review_ids)
         body = build_comment_body(
             status=args.status,
@@ -318,15 +390,64 @@ def main(argv: list[str] | None = None) -> int:
             review_ids=review_ids,
             notes=args.notes,
         )
+        _ensure_gh_authenticated()
+        pr = _current_pr_context()
 
         if args.dry_run:
             api_base_url = _propel_api_base_url()
-            print(f"DRY_RUN repo={pr.repo} pr={pr.number} endpoint={api_base_url}/v1/reviews/pr-comments/upsert")
+            if pr is None:
+                repository = _repository_for_pending_carl_run()
+                branch = _current_branch_name()
+                head_commit_sha = _head_commit_sha()
+                print(
+                    "DRY_RUN "
+                    f"repo={repository} "
+                    f"branch={branch} "
+                    f"head={head_commit_sha} "
+                    f"endpoint={api_base_url}/v1/reviews/carl-runs"
+                )
+            else:
+                print(f"DRY_RUN repo={pr.repo} pr={pr.number} endpoint={api_base_url}/v1/reviews/pr-comments/upsert")
             print(body)
             return 0
 
         api_key = _propel_api_key()
         api_base_url = _propel_api_base_url()
+        if pr is None:
+            repository = _repository_for_pending_carl_run()
+            branch = _current_branch_name()
+            head_commit_sha = _head_commit_sha()
+            result = _post_pending_run_via_propel_api(
+                api_base_url=api_base_url,
+                api_key=api_key,
+                repository=repository,
+                branch=branch,
+                head_commit_sha=head_commit_sha,
+                status=args.status,
+                base=args.base,
+                iterations=args.iterations,
+                fixed=args.fixed,
+                deferred=args.deferred,
+                remaining=args.remaining,
+                checks=args.checks,
+                review_ids=review_ids,
+                notes=args.notes,
+                marker=MARKER,
+                body=body,
+            )
+            run_id = str(result.get("run_id", "")).strip()
+            if run_id != "":
+                print(
+                    f"No open PR found for current branch; persisted CARL run {run_id} "
+                    f"for {repository}@{head_commit_sha}."
+                )
+            else:
+                print(
+                    "No open PR found for current branch; persisted CARL run "
+                    f"for {repository}@{head_commit_sha}."
+                )
+            return 0
+
         result = _post_summary_via_propel_api(
             api_base_url=api_base_url,
             api_key=api_key,

@@ -86,6 +86,7 @@ Use `propel-address-pr-comments` to find the open PR for the current branch, fet
 ## CARL PR Summary Comment
 
 CARL can publish/update a sticky summary comment on the open PR using Propel Review API, but this should run once at terminal stop condition only.
+If no PR exists yet, the script persists a pending terminal CARL run (`POST /v1/reviews/carl-runs`) for later PR bridging.
 This keeps the comment author as Propel Bot (instead of local `gh` user identity).
 
 ```bash

@@ -81,7 +81,7 @@ python scripts/post_carl_summary_comment.py \
 Rules:
 - The script upserts a sticky comment via Propel Review API (`/v1/reviews/pr-comments/upsert`) so the author is Propel Bot.
 - `PROPEL_API_KEY` must be set with `reviews:write` scope.
-- If there is no open PR for the current branch, report this to the user and continue.
+- If there is no open PR for the current branch, persist a pending terminal CARL run via `POST /v1/reviews/carl-runs` and continue.
 - If `gh` is not authenticated, report the error and continue.
 - If the Review API upsert call fails, report the error and continue.
 - Never hide CARL output if PR comment publishing fails.
