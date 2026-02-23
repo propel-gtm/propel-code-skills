@@ -70,6 +70,13 @@ class PullRequestContext:
     repo: str
 
 
+@dataclass
+class RepositoryContext:
+    branch: str
+    lookup_repo: str
+    current_owner: str
+
+
 def _repo_slug_from_pr_url(url: str) -> str:
     parsed = urlparse.urlparse(url)
     parts = [p for p in parsed.path.split("/") if p]
@@ -112,9 +119,19 @@ def _resolve_pr_lookup_repository() -> tuple[str, str]:
     return lookup_repo, current_owner
 
 
-def _current_branch_pr() -> tuple[int, str] | None:
+def _current_repository_context() -> RepositoryContext:
     branch = _current_branch_name()
     lookup_repo, current_owner = _resolve_pr_lookup_repository()
+    return RepositoryContext(branch=branch, lookup_repo=lookup_repo, current_owner=current_owner)
+
+
+def _current_branch_pr(repo_context: RepositoryContext | None = None) -> tuple[int, str] | None:
+    if repo_context is None:
+        repo_context = _current_repository_context()
+
+    branch = repo_context.branch
+    lookup_repo = repo_context.lookup_repo
+    current_owner = repo_context.current_owner
     head_refs = [f"{current_owner}:{branch}", branch]
     seen: set[str] = set()
 
@@ -153,8 +170,8 @@ def _current_branch_pr() -> tuple[int, str] | None:
     return None
 
 
-def _current_pr_context() -> PullRequestContext | None:
-    current = _current_branch_pr()
+def _current_pr_context(repo_context: RepositoryContext | None = None) -> PullRequestContext | None:
+    current = _current_branch_pr(repo_context)
     if current is None:
         return None
     pr_number, lookup_repo = current
@@ -180,9 +197,10 @@ def _current_pr_context() -> PullRequestContext | None:
     return PullRequestContext(number=number, url=url, title=title, repo=repo)
 
 
-def _repository_for_pending_carl_run() -> str:
-    lookup_repo, _ = _resolve_pr_lookup_repository()
-    return lookup_repo
+def _repository_for_pending_carl_run(repo_context: RepositoryContext | None = None) -> str:
+    if repo_context is None:
+        repo_context = _current_repository_context()
+    return repo_context.lookup_repo
 
 
 def _propel_api_key() -> str:
@@ -238,15 +256,9 @@ def build_comment_body(
     )
 
 
-def _post_summary_via_propel_api(*, api_base_url: str, api_key: str, repository: str, pr_number: int, body: str) -> dict[str, Any]:
-    payload = {
-        "repository": repository,
-        "pr_number": pr_number,
-        "marker": MARKER,
-        "body": body,
-    }
+def _propel_api_post(*, api_base_url: str, api_key: str, path: str, payload: dict[str, Any]) -> dict[str, Any]:
     req = urlrequest.Request(
-        url=f"{api_base_url}/v1/reviews/pr-comments/upsert",
+        url=f"{api_base_url}{path}",
         data=json.dumps(payload).encode("utf-8"),
         method="POST",
         headers={
@@ -273,6 +285,21 @@ def _post_summary_via_propel_api(*, api_base_url: str, api_key: str, repository:
     if not isinstance(data, dict):
         raise ScriptError("Unexpected response from Propel API")
     return data
+
+
+def _post_summary_via_propel_api(*, api_base_url: str, api_key: str, repository: str, pr_number: int, body: str) -> dict[str, Any]:
+    payload = {
+        "repository": repository,
+        "pr_number": pr_number,
+        "marker": MARKER,
+        "body": body,
+    }
+    return _propel_api_post(
+        api_base_url=api_base_url,
+        api_key=api_key,
+        path="/v1/reviews/pr-comments/upsert",
+        payload=payload,
+    )
 
 
 def _post_pending_run_via_propel_api(
@@ -310,34 +337,12 @@ def _post_pending_run_via_propel_api(
         "marker": marker,
         "body": body,
     }
-    req = urlrequest.Request(
-        url=f"{api_base_url}/v1/reviews/carl-runs",
-        data=json.dumps(payload).encode("utf-8"),
-        method="POST",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
+    return _propel_api_post(
+        api_base_url=api_base_url,
+        api_key=api_key,
+        path="/v1/reviews/carl-runs",
+        payload=payload,
     )
-
-    try:
-        with urlrequest.urlopen(req, timeout=COMMAND_TIMEOUT_SECONDS) as resp:
-            response_text = resp.read().decode("utf-8")
-    except urlerror.HTTPError as exc:
-        error_body = exc.read().decode("utf-8", errors="replace").strip()
-        detail = error_body if error_body else str(exc.reason)
-        raise ScriptError(f"Propel API request failed ({exc.code}): {detail}") from exc
-    except urlerror.URLError as exc:
-        raise ScriptError(f"Failed to reach Propel API: {exc.reason}") from exc
-
-    try:
-        data = json.loads(response_text)
-    except json.JSONDecodeError as exc:
-        raise ScriptError("Invalid JSON response from Propel API") from exc
-    if not isinstance(data, dict):
-        raise ScriptError("Unexpected response from Propel API")
-    return data
 
 
 def _parse_review_ids(raw: str) -> list[str]:
@@ -391,13 +396,14 @@ def main(argv: list[str] | None = None) -> int:
             notes=args.notes,
         )
         _ensure_gh_authenticated()
-        pr = _current_pr_context()
+        repo_context = _current_repository_context()
+        pr = _current_pr_context(repo_context)
 
         if args.dry_run:
             api_base_url = _propel_api_base_url()
             if pr is None:
-                repository = _repository_for_pending_carl_run()
-                branch = _current_branch_name()
+                repository = _repository_for_pending_carl_run(repo_context)
+                branch = repo_context.branch
                 head_commit_sha = _head_commit_sha()
                 print(
                     "DRY_RUN "
@@ -414,8 +420,8 @@ def main(argv: list[str] | None = None) -> int:
         api_key = _propel_api_key()
         api_base_url = _propel_api_base_url()
         if pr is None:
-            repository = _repository_for_pending_carl_run()
-            branch = _current_branch_name()
+            repository = _repository_for_pending_carl_run(repo_context)
+            branch = repo_context.branch
             head_commit_sha = _head_commit_sha()
             result = _post_pending_run_via_propel_api(
                 api_base_url=api_base_url,
