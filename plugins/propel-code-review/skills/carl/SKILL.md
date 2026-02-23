@@ -13,6 +13,7 @@ Run the loop in strict sequence: never start a new CARL iteration while the curr
 ## Required Dependency
 
 - Load and use `propel-code-review` for each review pass.
+- Use `scripts/post_carl_summary_comment.py` to publish final loop summary to the open PR.
 
 If `propel-code-review` is unavailable, stop and report that dependency is missing.
 
@@ -56,6 +57,32 @@ Final states:
 - `COMPLETE`: zero comments remain.
 - `BLOCKED`: repeated comment signature or unresolved hard blocker.
 - `MAX_ITERATIONS_REACHED`: loop limit hit with remaining comments.
+
+## GitHub PR Bridge
+
+When CARL reaches a terminal stop condition (`COMPLETE`, `BLOCKED`, or `MAX_ITERATIONS_REACHED`), publish a PR summary comment
+using:
+
+```bash
+python scripts/post_carl_summary_comment.py \
+  --status <COMPLETE|BLOCKED|MAX_ITERATIONS_REACHED> \
+  --base <base-branch> \
+  --iterations <n> \
+  --fixed <n> \
+  --deferred <n> \
+  --remaining <n> \
+  --checks <passed|failed|not_run> \
+  --review-ids "<id1,id2,...>" \
+  --notes "<optional short note>"
+```
+
+Rules:
+- The script upserts a sticky comment via Propel Review API (`/v1/reviews/pr-comments/upsert`) so the author is Propel Bot.
+- `PROPEL_API_KEY` must be set with `reviews:write` scope.
+- If there is no open PR for the current branch, report this to the user and continue.
+- If `gh` is not authenticated, report the error and continue.
+- If the Review API upsert call fails, report the error and continue.
+- Never hide CARL output if PR comment publishing fails.
 
 ## Suggested Invocation
 

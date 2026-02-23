@@ -76,5 +76,46 @@ Use `carl` to repeatedly run `propel-code-review` and address valid comments unt
 ```
 
 ```text
-Use `propel-address-pr-comments` to find the open PR for the current branch, choose mode (`ALL_COMMENTS`, `AGENT_DECIDES`, or `HUMAN_SELECTS`), and apply fixes for selected findings.
+Use `carl` and publish a sticky GitHub PR summary comment only when the loop reaches a terminal stop condition (COMPLETE, BLOCKED, or MAX_ITERATIONS_REACHED), with counts of fixed/deferred/remaining comments.
+```
+
+```text
+Use `propel-address-pr-comments` to find the open PR for the current branch, fetch Propel findings, ask which comments to address, and apply fixes for selected findings.
+```
+
+## CARL PR Summary Comment
+
+CARL can publish/update a sticky summary comment on the open PR using Propel Review API, but this should run once at terminal stop condition only.
+This keeps the comment author as Propel Bot (instead of local `gh` user identity).
+
+```bash
+python plugins/propel-code-review/skills/carl/scripts/post_carl_summary_comment.py \
+  --status COMPLETE \
+  --base main \
+  --iterations 3 \
+  --fixed 7 \
+  --deferred 1 \
+  --remaining 0 \
+  --checks passed \
+  --review-ids "019c...,019d..." \
+  --notes "Local CARL loop finished."
+```
+
+Optional:
+
+```bash
+export PROPEL_API_BASE_URL="https://api.propelcode.ai"
+```
+
+Dry run (no GitHub write):
+
+```bash
+python plugins/propel-code-review/skills/carl/scripts/post_carl_summary_comment.py \
+  --status COMPLETE \
+  --iterations 1 \
+  --fixed 1 \
+  --deferred 0 \
+  --remaining 0 \
+  --checks passed \
+  --dry-run
 ```
