@@ -103,8 +103,15 @@ if [[ -z "$BAD_REPO" ]]; then
 fi
 
 if ! BASE_COMMIT="$(git merge-base "$BASE_BRANCH" HEAD 2>/dev/null)"; then
-  echo "Error: Could not compute merge-base for '$BASE_BRANCH' and HEAD." >&2
-  exit 1
+  remote_base="origin/$BASE_BRANCH"
+  if [[ "$BASE_BRANCH" == origin/* ]]; then
+    remote_base="$BASE_BRANCH"
+  fi
+
+  if ! BASE_COMMIT="$(git merge-base "$remote_base" HEAD 2>/dev/null)"; then
+    echo "Error: Could not compute merge-base for '$BASE_BRANCH' (or '$remote_base') and HEAD." >&2
+    exit 1
+  fi
 fi
 
 DIFF_FILE="$(mktemp)"
@@ -129,15 +136,19 @@ submit_case() {
   body_file="$(mktemp)"
 
   local code
-  code="$(
+  if ! code="$(
     jq -n --rawfile diff "$DIFF_FILE" --arg repo "$repo" --arg base "$BASE_COMMIT" \
       '{diff:$diff, repository:$repo, base_commit:$base}' \
-      | curl -s -o "$body_file" -w "%{http_code}" \
+      | curl -sS -o "$body_file" -w "%{http_code}" \
           -H "Authorization: Bearer $token" \
           -H "Content-Type: application/json" \
           --data-binary @- \
           "$API_URL/v1/reviews"
-  )"
+  )"; then
+    echo "Error: Request failed for repo '$repo' (transport-level failure)." >&2
+    rm -f "$body_file"
+    return 1
+  fi
 
   printf '%s\n' "$code"
   cat "$body_file"
