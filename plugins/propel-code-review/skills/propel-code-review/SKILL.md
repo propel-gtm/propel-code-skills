@@ -216,15 +216,26 @@ REPO_SLUG=$(git remote get-url origin | sed -E 's#(git@github.com:|https://githu
 git diff "$BASE_BRANCH" > /tmp/review_api.diff
 
 CREATE_BODY_FILE=$(mktemp)
-CREATE_STATUS=$(jq -n --rawfile diff /tmp/review_api.diff \
-                     --arg repo "$REPO_SLUG" \
-                     --arg base "$BASE_COMMIT" \
-                     '{diff:$diff, repository:$repo, base_commit:$base}' \
-  | curl -sS -o "$CREATE_BODY_FILE" -w "%{http_code}" \
-      -H "Authorization: Bearer $PROPEL_API_KEY" \
-      -H "Content-Type: application/json" \
-      --data-binary @- \
-      https://api.propelcode.ai/v1/reviews)
+trap 'rm -f "$CREATE_BODY_FILE"' EXIT
+
+CREATE_STATUS=""
+for attempt in 1 2 3; do
+  CREATE_STATUS=$(jq -n --rawfile diff /tmp/review_api.diff \
+                       --arg repo "$REPO_SLUG" \
+                       --arg base "$BASE_COMMIT" \
+                       '{diff:$diff, repository:$repo, base_commit:$base}' \
+    | curl -sS -o "$CREATE_BODY_FILE" -w "%{http_code}" \
+        -H "Authorization: Bearer $PROPEL_API_KEY" \
+        -H "Content-Type: application/json" \
+        --data-binary @- \
+        https://api.propelcode.ai/v1/reviews)
+
+  if [ "${CREATE_STATUS#5}" != "$CREATE_STATUS" ] && [ "$attempt" -lt 3 ]; then
+    sleep $((attempt * 2))
+    continue
+  fi
+  break
+done
 
 case "$CREATE_STATUS" in
   202)
@@ -245,7 +256,7 @@ case "$CREATE_STATUS" in
     exit 1
     ;;
   5??)
-    echo "Review create failed ($CREATE_STATUS): transient Propel API error; retry with bounded backoff."
+    echo "Review create failed ($CREATE_STATUS): transient Propel API error after bounded retries."
     cat "$CREATE_BODY_FILE"
     exit 1
     ;;
@@ -257,6 +268,7 @@ case "$CREATE_STATUS" in
 esac
 
 REVIEW_ID=$(jq -r '.review_id // empty' "$CREATE_BODY_FILE")
+trap - EXIT
 rm -f "$CREATE_BODY_FILE"
 if [ -z "$REVIEW_ID" ]; then
   echo "Review create succeeded but review_id is missing"
