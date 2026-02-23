@@ -119,3 +119,16 @@ python plugins/propel-code-review/skills/carl/scripts/post_carl_summary_comment.
   --checks passed \
   --dry-run
 ```
+
+## Permission Smoke Test
+
+From a target repository (for example, `propel-gtm`), run:
+
+```bash
+/path/to/propel-code-skills/plugins/propel-code-review/skills/propel-code-review/scripts/smoke_test_permissions.sh
+```
+
+This checks:
+- good token + good repo (`202`)
+- good token + bad repo (`404`)
+- bad token + good repo (`401/403`)

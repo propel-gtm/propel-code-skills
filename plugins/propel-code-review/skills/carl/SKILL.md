@@ -26,14 +26,15 @@ If `propel-code-review` is unavailable, stop and report that dependency is missi
 
 1. Determine the base branch and compute the diff: `git diff <base>...HEAD`.
 2. Run `propel-code-review` on that diff and wait for completion (`completed` or `failed`) before doing anything else.
-3. If review status is `failed`, retry once. If it fails again, stop and report the API error.
-4. If there are zero comments, stop and report completion.
-5. For each comment:
+3. If `propel-code-review` returns permission/access errors (`401`, `403`, `404`, "Repository not found"), stop immediately with `BLOCKED` and report the exact repo slug plus required user action.
+4. If review status is `failed`, retry once. If it fails again, stop and report the API error.
+5. If there are zero comments, stop and report completion.
+6. For each comment:
    - Decide if it is valid for this codebase.
    - If valid, implement the fix.
    - If not valid, keep code unchanged and record a brief reason.
-6. Run relevant checks after edits (at minimum, checks related to touched code).
-7. Only after step 6 is fully complete, repeat from step 1 until comments are zero or max iterations is reached.
+7. Run relevant checks after edits (at minimum, checks related to touched code).
+8. Only after step 7 is fully complete, repeat from step 1 until comments are zero or max iterations is reached.
 
 ## Loop Guards
 
@@ -42,6 +43,7 @@ If `propel-code-review` is unavailable, stop and report that dependency is missi
 - Track a stable signature of remaining comments (`file_path + line + severity + message`).
 - If the same signature repeats twice in a row, stop and report as blocked instead of looping forever.
 - If there is no branch diff against base (`git diff <base>...HEAD` is empty), stop and report there is nothing to review.
+- Do not retry `401/403/404` permission/access failures. Exit as `BLOCKED` immediately.
 
 ## Output Contract
 
@@ -55,7 +57,7 @@ For each iteration, report:
 Final states:
 
 - `COMPLETE`: zero comments remain.
-- `BLOCKED`: repeated comment signature or unresolved hard blocker.
+- `BLOCKED`: repeated comment signature, permission/access failure (`401/403/404`), or unresolved hard blocker.
 - `MAX_ITERATIONS_REACHED`: loop limit hit with remaining comments.
 
 ## GitHub PR Bridge
