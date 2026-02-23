@@ -80,11 +80,21 @@ if [[ -z "${PROPEL_API_KEY:-}" ]]; then
 fi
 
 if [[ -z "$BASE_BRANCH" ]]; then
-  BASE_BRANCH="$(gh pr view --json baseRefName -q '.baseRefName' 2>/dev/null || git remote show origin | sed -n '/HEAD branch/s/.*: //p')"
+  BASE_BRANCH="$(gh pr view --json baseRefName -q '.baseRefName' 2>/dev/null || git remote show origin 2>/dev/null | sed -n '/HEAD branch/s/.*: //p' || true)"
 fi
 
 if [[ -z "$REPO_SLUG" ]]; then
-  REPO_SLUG="$(git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\.git$//')"
+  REPO_SLUG="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || git remote get-url origin 2>/dev/null | sed -E 's#.*[:/]([^/]+/[^/]+?)(\.git)?$#\1#' || true)"
+fi
+
+if [[ -z "$BASE_BRANCH" ]]; then
+  echo "Error: Could not determine base branch. Please specify with --base-branch." >&2
+  exit 1
+fi
+
+if [[ -z "$REPO_SLUG" || "$REPO_SLUG" != */* ]]; then
+  echo "Error: Could not determine repository slug. Please specify with --repo owner/repo." >&2
+  exit 1
 fi
 
 if [[ -z "$BAD_REPO" ]]; then
@@ -92,10 +102,14 @@ if [[ -z "$BAD_REPO" ]]; then
   BAD_REPO="${owner}/not-hooked-up-repo"
 fi
 
-BASE_COMMIT="$(git rev-parse "$BASE_BRANCH")"
+if ! BASE_COMMIT="$(git merge-base "$BASE_BRANCH" HEAD 2>/dev/null)"; then
+  echo "Error: Could not compute merge-base for '$BASE_BRANCH' and HEAD." >&2
+  exit 1
+fi
+
 DIFF_FILE="$(mktemp)"
 trap 'rm -f "$DIFF_FILE"' EXIT
-git diff "$BASE_BRANCH" --no-color > "$DIFF_FILE"
+git diff "$BASE_COMMIT" --no-color > "$DIFF_FILE"
 
 if [[ ! -s "$DIFF_FILE" ]]; then
   echo "Diff is empty for base branch '$BASE_BRANCH'. Make a local change first, then re-run." >&2
