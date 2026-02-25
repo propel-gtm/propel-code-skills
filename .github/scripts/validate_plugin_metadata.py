@@ -16,12 +16,21 @@ def _load_json(path: Path) -> Any:
         raise ValueError(f"{path}: invalid JSON ({exc})") from exc
 
 
-def _require_keys(obj: dict[str, Any], keys: tuple[str, ...], path: Path) -> list[str]:
-    errors: list[str] = []
-    for key in keys:
-        if key not in obj:
-            errors.append(f"{path}: missing required key `{key}`")
-    return errors
+def _missing_keys(obj: dict[str, Any], keys: tuple[str, ...]) -> list[str]:
+    return [key for key in keys if key not in obj]
+
+
+def _resolve_relative_path(base_dir: Path, rel_path: str) -> Path | None:
+    candidate = Path(rel_path)
+    if candidate.is_absolute():
+        return None
+
+    resolved = (base_dir / candidate).resolve()
+    try:
+        resolved.relative_to(base_dir)
+    except ValueError:
+        return None
+    return resolved
 
 
 def main() -> int:
@@ -32,12 +41,18 @@ def main() -> int:
     if not marketplace_path.exists():
         errors.append(f"{marketplace_path}: file does not exist")
     else:
-        marketplace = _load_json(marketplace_path)
+        try:
+            marketplace = _load_json(marketplace_path)
+        except ValueError as exc:
+            errors.append(str(exc))
+            marketplace = {}
+
         if not isinstance(marketplace, dict):
             errors.append(f"{marketplace_path}: top-level JSON must be an object")
             marketplace = {}
 
-        errors.extend(_require_keys(marketplace, ("name", "plugins"), marketplace_path))
+        for key in _missing_keys(marketplace, ("name", "plugins")):
+            errors.append(f"{marketplace_path}: missing required key `{key}`")
         plugins = marketplace.get("plugins", [])
         if not isinstance(plugins, list) or not plugins:
             errors.append(f"{marketplace_path}: `plugins` must be a non-empty array")
@@ -49,11 +64,9 @@ def main() -> int:
                 errors.append(f"{label}: item must be an object")
                 continue
 
-            missing = _require_keys(
-                plugin, ("name", "source", "description", "version"), marketplace_path
-            )
-            for err in missing:
-                errors.append(f"{label}: {err.split(': ', 1)[1]}")
+            missing = _missing_keys(plugin, ("name", "source", "description", "version"))
+            for key in missing:
+                errors.append(f"{label}: missing required key `{key}`")
             if missing:
                 continue
 
@@ -62,7 +75,13 @@ def main() -> int:
                 errors.append(f"{label}: `source` must be a string")
                 continue
 
-            plugin_root = repo_root / source
+            plugin_root = _resolve_relative_path(repo_root, source)
+            if plugin_root is None:
+                errors.append(
+                    f"{label}: source path must be repository-relative and not escape repo ({source})"
+                )
+                continue
+
             if not plugin_root.exists():
                 errors.append(f"{label}: source path does not exist ({source})")
                 continue
@@ -74,23 +93,34 @@ def main() -> int:
                 )
                 continue
 
-            plugin_manifest = _load_json(plugin_manifest_path)
+            try:
+                plugin_manifest = _load_json(plugin_manifest_path)
+            except ValueError as exc:
+                errors.append(str(exc))
+                continue
+
             if not isinstance(plugin_manifest, dict):
                 errors.append(f"{plugin_manifest_path}: top-level JSON must be an object")
                 continue
 
-            errors.extend(
-                _require_keys(
-                    plugin_manifest,
-                    ("name", "description", "version", "skills"),
-                    plugin_manifest_path,
-                )
-            )
+            for key in _missing_keys(
+                plugin_manifest, ("name", "description", "version", "skills")
+            ):
+                errors.append(f"{plugin_manifest_path}: missing required key `{key}`")
 
             if plugin_manifest.get("name") != plugin.get("name"):
                 errors.append(
                     f"{plugin_manifest_path}: `name` ({plugin_manifest.get('name')}) "
                     f"does not match marketplace entry ({plugin.get('name')})"
+                )
+            if plugin_manifest.get("description") != plugin.get("description"):
+                errors.append(
+                    f"{plugin_manifest_path}: `description` does not match marketplace entry"
+                )
+            if plugin_manifest.get("version") != plugin.get("version"):
+                errors.append(
+                    f"{plugin_manifest_path}: `version` ({plugin_manifest.get('version')}) "
+                    f"does not match marketplace entry ({plugin.get('version')})"
                 )
 
             skills = plugin_manifest.get("skills", [])
@@ -103,7 +133,14 @@ def main() -> int:
                     errors.append(f"{plugin_manifest_path}: each `skills` item must be a string")
                     continue
 
-                skill_root = plugin_root / skill_path
+                skill_root = _resolve_relative_path(plugin_root, skill_path)
+                if skill_root is None:
+                    errors.append(
+                        f"{plugin_manifest_path}: skill path must be plugin-relative and not "
+                        f"escape plugin root ({skill_path})"
+                    )
+                    continue
+
                 if not skill_root.exists():
                     errors.append(
                         f"{plugin_manifest_path}: skill path does not exist ({skill_path})"
