@@ -91,11 +91,26 @@ BODY_FILE="$(mktemp)"
 trap 'rm -f "$BODY_FILE"' EXIT
 
 for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
-  HTTP_CODE="$(
+  if ! HTTP_CODE="$(
     curl -sS -o "$BODY_FILE" -w "%{http_code}" \
       -H "Authorization: Bearer $PROPEL_API_KEY" \
       "$API_URL/v1/reviews/$REVIEW_ID"
-  )"
+  )"; then
+    if [[ "$i" -lt "$MAX_ATTEMPTS" ]]; then
+      sleep "$SLEEP_SECONDS"
+      continue
+    fi
+    echo "poll failed: transport-level request error after bounded retries" >&2
+    if [[ -s "$BODY_FILE" ]]; then
+      cat "$BODY_FILE" >&2
+    fi
+    exit 1
+  fi
+
+  if [[ "$HTTP_CODE" =~ ^5 ]] && [[ "$i" -lt "$MAX_ATTEMPTS" ]]; then
+    sleep "$SLEEP_SECONDS"
+    continue
+  fi
 
   if [[ ! "$HTTP_CODE" =~ ^2 ]]; then
     echo "poll failed ($HTTP_CODE):" >&2
@@ -114,6 +129,9 @@ for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
       printf '%s\n' "$RESPONSE" > "$OUTPUT_FILE"
     fi
     printf '%s\n' "$RESPONSE"
+    if [[ "$REVIEW_STATUS" == "failed" ]]; then
+      exit 2
+    fi
     exit 0
   fi
 

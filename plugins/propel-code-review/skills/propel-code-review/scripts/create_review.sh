@@ -101,14 +101,24 @@ trap 'rm -f "$BODY_FILE"' EXIT
 
 HTTP_CODE=""
 for ((attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)); do
-  HTTP_CODE="$(
+  if ! HTTP_CODE="$(
     jq -n --rawfile diff "$DIFF_FILE" --arg repo "$REPO_SLUG" --arg base "$BASE_COMMIT" '{diff:$diff, repository:$repo, base_commit:$base}' \
       | curl -sS -o "$BODY_FILE" -w "%{http_code}" \
         -H "Authorization: Bearer $PROPEL_API_KEY" \
         -H "Content-Type: application/json" \
         --data-binary @- \
         "$API_URL/v1/reviews"
-  )"
+  )"; then
+    if [[ "$attempt" -lt "$MAX_ATTEMPTS" ]]; then
+      sleep $((attempt * 2))
+      continue
+    fi
+    echo "Review create failed: transport-level request error after bounded retries." >&2
+    if [[ -s "$BODY_FILE" ]]; then
+      cat "$BODY_FILE" >&2
+    fi
+    exit 1
+  fi
 
   if [[ "$HTTP_CODE" =~ ^5 ]] && [[ "$attempt" -lt "$MAX_ATTEMPTS" ]]; then
     sleep $((attempt * 2))
