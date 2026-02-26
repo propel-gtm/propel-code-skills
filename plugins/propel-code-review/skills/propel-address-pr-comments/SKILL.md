@@ -21,7 +21,8 @@ Paths below are relative to this skill directory:
 If your client supports prefix-based trust/approval, approve these once before
 running this skill:
 
-- `python3 scripts/fetch_comments.py`
+- `scripts/fetch_comments.py`
+- `python scripts/fetch_comments.py`
 - `gh auth status`
 - `gh pr view`
 - `gh api graphql`

@@ -54,6 +54,8 @@ running CARL:
 - `../propel-code-review/scripts/create_review.sh`
 - `../propel-code-review/scripts/poll_review.sh`
 - `../propel-code-review/scripts/post_comment_feedback.sh`
+- `scripts/post_carl_summary_comment.py`
+- `python scripts/post_carl_summary_comment.py`
 - `git diff`
 - `git rev-parse`
 - `git remote get-url`
@@ -133,7 +135,7 @@ When CARL reaches a terminal stop condition (`COMPLETE`, `BLOCKED`, or `MAX_ITER
 using:
 
 ```bash
-python scripts/post_carl_summary_comment.py \
+scripts/post_carl_summary_comment.py \
   --status <COMPLETE|BLOCKED|MAX_ITERATIONS_REACHED> \
   --base <base-branch> \
   --iterations <n> \

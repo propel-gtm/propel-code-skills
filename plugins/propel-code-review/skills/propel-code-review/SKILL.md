@@ -17,7 +17,7 @@ Run async, diff-based code reviews via the production API and retrieve comments.
 Before rollout to a new workspace/repo, run this from the target repository root:
 
 ```bash
-/path/to/propel-code-skills/plugins/propel-code-review/skills/propel-code-review/scripts/smoke_test_permissions.sh
+scripts/smoke_test_permissions.sh
 ```
 
 It validates:
