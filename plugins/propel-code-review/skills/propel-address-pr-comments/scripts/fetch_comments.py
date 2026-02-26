@@ -39,6 +39,8 @@ query(
       url
       title
       state
+      headRefName
+      headRefOid
 
       # Top-level "Conversation" comments (issue comments on the PR)
       comments(first: 100, after: $commentsCursor) {
@@ -169,6 +171,23 @@ def gh_api_graphql(
     return payload
 
 
+def _thread_status(thread: dict[str, Any]) -> str:
+    if thread.get("isOutdated"):
+        return "outdated"
+    if thread.get("isResolved"):
+        return "resolved"
+    return "active"
+
+
+def _annotate_thread_status(threads: list[dict[str, Any]]) -> dict[str, int]:
+    summary = {"active": 0, "outdated": 0, "resolved": 0}
+    for thread in threads:
+        status = _thread_status(thread)
+        thread["status"] = status
+        summary[status] += 1
+    return summary
+
+
 def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
     conversation_comments: list[dict[str, Any]] = []
     reviews: list[dict[str, Any]] = []
@@ -203,6 +222,8 @@ def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
                 "url": pr["url"],
                 "title": pr["title"],
                 "state": pr["state"],
+                "head_ref_name": pr["headRefName"],
+                "head_ref_oid": pr["headRefOid"],
                 "owner": owner,
                 "repo": repo,
             }
@@ -226,11 +247,14 @@ def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
             has_more_threads = t["pageInfo"]["hasNextPage"]
 
     assert pr_meta is not None
+    thread_status_summary = _annotate_thread_status(review_threads)
+
     return {
         "pull_request": pr_meta,
         "conversation_comments": conversation_comments,
         "reviews": reviews,
         "review_threads": review_threads,
+        "review_thread_status_summary": thread_status_summary,
     }
 
 
