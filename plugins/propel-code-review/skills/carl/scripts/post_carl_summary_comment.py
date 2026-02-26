@@ -32,6 +32,8 @@ from urllib import error as urlerror
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
+from command_helpers import CommandError, run_cmd, run_json
+
 COMMAND_TIMEOUT_SECONDS = 120
 MARKER = "<!-- carl-local-loop -->"
 DEFAULT_PROPEL_API_BASE_URL = "https://api.propelcode.ai"
@@ -39,9 +41,6 @@ DEFAULT_PROPEL_API_BASE_URL = "https://api.propelcode.ai"
 
 class ScriptError(RuntimeError):
     """Script-level failure with actionable message."""
-
-
-from command_helpers import CommandError, run_cmd, run_json
 
 
 def _run(cmd: list[str], stdin: str | None = None) -> str:
