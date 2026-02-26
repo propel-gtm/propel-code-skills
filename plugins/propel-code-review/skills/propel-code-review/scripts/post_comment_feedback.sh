@@ -99,12 +99,24 @@ PAYLOAD="$(jq -n \
    end'
 )"
 
-RESPONSE="$(
-  curl -sS -X POST "$API_URL/v1/reviews/$REVIEW_ID/comments/feedback" \
+BODY_FILE="$(mktemp)"
+trap 'rm -f "$BODY_FILE"' EXIT
+
+HTTP_CODE="$(
+  curl -sS -o "$BODY_FILE" -w "%{http_code}" \
+    -X POST "$API_URL/v1/reviews/$REVIEW_ID/comments/feedback" \
     -H "Authorization: Bearer $PROPEL_API_KEY" \
     -H "Content-Type: application/json" \
     --data-binary "$PAYLOAD"
 )"
+
+RESPONSE="$(cat "$BODY_FILE")"
+
+if [[ ! "$HTTP_CODE" =~ ^2 ]]; then
+  echo "Feedback post failed ($HTTP_CODE)" >&2
+  echo "$RESPONSE" >&2
+  exit 1
+fi
 
 if [[ -n "$OUTPUT_FILE" ]]; then
   printf '%s\n' "$RESPONSE" > "$OUTPUT_FILE"

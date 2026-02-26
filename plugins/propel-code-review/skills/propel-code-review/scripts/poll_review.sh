@@ -87,14 +87,25 @@ if ! [[ "$SLEEP_SECONDS" =~ ^[0-9]+$ ]] || [[ "$SLEEP_SECONDS" -lt 1 ]]; then
   exit 2
 fi
 
+BODY_FILE="$(mktemp)"
+trap 'rm -f "$BODY_FILE"' EXIT
+
 for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
-  RESPONSE="$(
-    curl -sS \
+  HTTP_CODE="$(
+    curl -sS -o "$BODY_FILE" -w "%{http_code}" \
       -H "Authorization: Bearer $PROPEL_API_KEY" \
       "$API_URL/v1/reviews/$REVIEW_ID"
   )"
 
-  REVIEW_STATUS="$(echo "$RESPONSE" | jq -r '.status // empty')"
+  if [[ ! "$HTTP_CODE" =~ ^2 ]]; then
+    echo "poll failed ($HTTP_CODE):" >&2
+    cat "$BODY_FILE" >&2
+    exit 1
+  fi
+
+  RESPONSE="$(cat "$BODY_FILE")"
+  # If jq parsing fails, keep polling rather than crashing on transient non-JSON responses.
+  REVIEW_STATUS="$(echo "$RESPONSE" | jq -r '.status // empty' 2>/dev/null || echo '')"
   NOW="$(date +%H:%M:%S)"
   echo "$NOW poll=$i status=${REVIEW_STATUS:-unknown}" >&2
 
