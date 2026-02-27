@@ -9,6 +9,25 @@ metadata:
 
 Guide to find the open PR for the current branch and address its comments with gh CLI. Run all `gh` commands with elevated network access.
 
+## Scripts Used by This Skill
+
+Paths below are relative to this skill directory:
+
+- `scripts/fetch_comments.py` fetches PR conversation comments, reviews, and
+  inline review threads via `gh api graphql`.
+
+## Approval-Friendly Prefixes (One-Time)
+
+If your client supports prefix-based trust/approval, approve these once before
+running this skill:
+
+- `scripts/fetch_comments.py`
+- `python scripts/fetch_comments.py`
+- `gh auth status`
+- `gh pr view`
+- `gh api graphql`
+- `jq`
+
 ## 0) Execution order (fetch first, then ask mode)
 
 Execution order:

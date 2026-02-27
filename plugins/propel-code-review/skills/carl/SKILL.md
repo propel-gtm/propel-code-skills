@@ -36,6 +36,75 @@ If `propel-code-review` is unavailable, stop and report that dependency is missi
 7. Run relevant checks after edits (at minimum, checks related to touched code).
 8. Only after step 7 is fully complete, repeat from step 1 until comments are zero or max iterations is reached.
 
+## Scripts Used by This Skill
+
+Use `propel-code-review` scripts for all review API calls. Paths below are
+relative to this skill directory:
+
+- `../propel-code-review/scripts/create_review.sh` creates a review.
+- `../propel-code-review/scripts/poll_review.sh` polls until terminal status.
+- `../propel-code-review/scripts/post_comment_feedback.sh` posts incorporated
+  true/false feedback for each review comment.
+
+## Approval-Friendly Prefixes (One-Time)
+
+If your client supports prefix-based trust/approval, approve these once before
+running CARL:
+
+- `../propel-code-review/scripts/create_review.sh`
+- `../propel-code-review/scripts/poll_review.sh`
+- `../propel-code-review/scripts/post_comment_feedback.sh`
+- `scripts/post_carl_summary_comment.py`
+- `python scripts/post_carl_summary_comment.py`
+- `git diff`
+- `git rev-parse`
+- `git remote get-url`
+- `go test`
+- `jq`
+
+## Scripted Review Calls
+
+For each CARL iteration, use the `propel-code-review` helper scripts instead of
+inline curl loops. Paths below are relative to this skill directory:
+
+```bash
+ITERATION=1
+BASE_COMMIT=$(git rev-parse "$BASE_BRANCH")
+REPO_SLUG=$(git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\\.git$//')
+DIFF_FILE="/tmp/carl_iteration${ITERATION}.diff"
+REVIEW_FILE="/tmp/carl_review_iter${ITERATION}.json"
+
+git diff "$BASE_BRANCH...HEAD" > "$DIFF_FILE"
+
+CREATE_RESPONSE=$(
+  ../propel-code-review/scripts/create_review.sh \
+    --diff-file "$DIFF_FILE" \
+    --repo "$REPO_SLUG" \
+    --base-commit "$BASE_COMMIT"
+)
+REVIEW_ID=$(echo "$CREATE_RESPONSE" | jq -r '.review_id // empty')
+
+../propel-code-review/scripts/poll_review.sh \
+  --review-id "$REVIEW_ID" \
+  --max-attempts 40 \
+  --sleep-seconds 3 \
+  --output-file "$REVIEW_FILE"
+
+cat "$REVIEW_FILE"
+
+jq -c '.comments[]?' "$REVIEW_FILE" | while read -r comment; do
+  COMMENT_ID=$(echo "$comment" | jq -r '.comment_id // empty')
+  if [ -z "$COMMENT_ID" ]; then
+    continue
+  fi
+  ../propel-code-review/scripts/post_comment_feedback.sh \
+    --review-id "$REVIEW_ID" \
+    --comment-id "$COMMENT_ID" \
+    --incorporated true \
+    --notes "Applied in CARL iteration ${ITERATION}."
+done
+```
+
 ## Loop Guards
 
 - Stop at `max iterations` even if comments remain.
@@ -66,7 +135,7 @@ When CARL reaches a terminal stop condition (`COMPLETE`, `BLOCKED`, or `MAX_ITER
 using:
 
 ```bash
-python scripts/post_carl_summary_comment.py \
+scripts/post_carl_summary_comment.py \
   --status <COMPLETE|BLOCKED|MAX_ITERATIONS_REACHED> \
   --base <base-branch> \
   --iterations <n> \

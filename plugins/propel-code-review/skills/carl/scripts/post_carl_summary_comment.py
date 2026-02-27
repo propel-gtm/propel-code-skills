@@ -8,7 +8,7 @@ Requires:
   - current branch associated with an open PR
 
 Usage example:
-  python post_carl_summary_comment.py \
+  ./post_carl_summary_comment.py \
     --status COMPLETE \
     --base main \
     --iterations 3 \

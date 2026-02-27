@@ -17,7 +17,7 @@ Run async, diff-based code reviews via the production API and retrieve comments.
 Before rollout to a new workspace/repo, run this from the target repository root:
 
 ```bash
-/path/to/propel-code-skills/plugins/propel-code-review/skills/propel-code-review/scripts/smoke_test_permissions.sh
+plugins/propel-code-review/skills/propel-code-review/scripts/smoke_test_permissions.sh
 ```
 
 It validates:
@@ -182,6 +182,31 @@ Response (200):
 }
 ```
 
+## Scripts Used by This Skill
+
+Use the helper scripts in `scripts/` instead of ad-hoc inline curl loops.
+Paths below are relative to this skill directory:
+
+- `scripts/create_review.sh` wraps `POST /v1/reviews`.
+- `scripts/poll_review.sh` wraps polling `GET /v1/reviews/:review_id` until
+  terminal status (`completed` or `failed`) or timeout.
+- `scripts/post_comment_feedback.sh` wraps
+  `POST /v1/reviews/:review_id/comments/feedback`.
+
+## Approval-Friendly Prefixes (One-Time)
+
+If your client supports prefix-based trust/approval, approve these once before
+running this skill:
+
+- `scripts/create_review.sh`
+- `scripts/poll_review.sh`
+- `scripts/post_comment_feedback.sh`
+- `git diff`
+- `git rev-parse`
+- `git remote get-url`
+- `gh pr view`
+- `jq`
+
 ## Workflow (Recommended)
 
 1. Resolve the base branch (PR base when available; otherwise remote default branch):
@@ -191,21 +216,23 @@ Response (200):
 3. Compute the repository slug:
    - `git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\\.git$//'`
 4. Generate the diff:
-   - `git diff "$BASE_BRANCH"`
-5. Call `POST /v1/reviews` with the diff, base commit, and repository using the canonical repo slug, and capture both HTTP status and response body.
-6. Handle create-review failures before polling:
+   - `git diff "$BASE_BRANCH" > /tmp/review_api.diff`
+5. Call `scripts/create_review.sh` with diff, base commit, and repository slug.
+6. Handle create-review failures before polling (script exits non-zero and
+   prints the API response body):
    - `401/403`: token invalid/expired/missing scope. Stop and ask user to refresh token.
    - `404`: repository is not connected to the Propel workspace (or slug is wrong). Stop and ask user to connect/fix repo slug.
    - `400/413`: invalid request or diff too large. Stop and show actionable fix.
    - `5xx`: transient API error. Retry with bounded backoff, then stop and report if still failing.
-7. Poll `GET /v1/reviews/:review_id` every 30 seconds until status is `completed` or `failed`.
+7. Poll with `scripts/poll_review.sh` every 30 seconds until status is
+   `completed` or `failed`.
 8. Present comments to the user with file/line context.
 9. For each comment, determine whether it is valid and applicable to the code.
 10. If valid, incorporate the change in the codebase. If invalid, do not change
    the codebase.
-11. Immediately call `POST /v1/reviews/:review_id/comments/feedback` for each
-   comment with the `comment_id` and `incorporated` true/false, plus brief
-   `notes` explaining the decision. Do not wait for user confirmation.
+11. Immediately call `scripts/post_comment_feedback.sh` for each comment with
+    `comment_id`, `incorporated` true/false, and brief `notes` explaining the
+    decision. Do not wait for user confirmation.
 
 ## Example (Production)
 
@@ -215,93 +242,38 @@ BASE_COMMIT=$(git rev-parse "$BASE_BRANCH")
 REPO_SLUG=$(git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\\.git$//')
 git diff "$BASE_BRANCH" > /tmp/review_api.diff
 
-CREATE_BODY_FILE=$(mktemp)
-trap 'rm -f "$CREATE_BODY_FILE"' EXIT
+CREATE_RESPONSE=$(
+  scripts/create_review.sh \
+    --diff-file /tmp/review_api.diff \
+    --repo "$REPO_SLUG" \
+    --base-commit "$BASE_COMMIT"
+)
 
-CREATE_STATUS=""
-for attempt in 1 2 3; do
-  CREATE_STATUS=$(jq -n --rawfile diff /tmp/review_api.diff \
-                       --arg repo "$REPO_SLUG" \
-                       --arg base "$BASE_COMMIT" \
-                       '{diff:$diff, repository:$repo, base_commit:$base}' \
-    | curl -sS -o "$CREATE_BODY_FILE" -w "%{http_code}" \
-        -H "Authorization: Bearer $PROPEL_API_KEY" \
-        -H "Content-Type: application/json" \
-        --data-binary @- \
-        https://api.propelcode.ai/v1/reviews)
-
-  if [ "${CREATE_STATUS#5}" != "$CREATE_STATUS" ] && [ "$attempt" -lt 3 ]; then
-    sleep $((attempt * 2))
-    continue
-  fi
-  break
-done
-
-case "$CREATE_STATUS" in
-  202)
-    ;;
-  401|403)
-    echo "Review create failed ($CREATE_STATUS): refresh token and confirm scopes reviews:read + reviews:write."
-    cat "$CREATE_BODY_FILE"
-    exit 1
-    ;;
-  404)
-    echo "Review create failed (404): connect repository in Propel workspace or correct owner/repo slug ($REPO_SLUG)."
-    cat "$CREATE_BODY_FILE"
-    exit 1
-    ;;
-  400|413)
-    echo "Review create failed ($CREATE_STATUS): fix request payload (or reduce diff size for 413)."
-    cat "$CREATE_BODY_FILE"
-    exit 1
-    ;;
-  5??)
-    echo "Review create failed ($CREATE_STATUS): transient Propel API error after bounded retries."
-    cat "$CREATE_BODY_FILE"
-    exit 1
-    ;;
-  *)
-    echo "Review create failed ($CREATE_STATUS)."
-    cat "$CREATE_BODY_FILE"
-    exit 1
-    ;;
-esac
-
-REVIEW_ID=$(jq -r '.review_id // empty' "$CREATE_BODY_FILE")
-trap - EXIT
-rm -f "$CREATE_BODY_FILE"
+REVIEW_ID=$(echo "$CREATE_RESPONSE" | jq -r '.review_id // empty')
 if [ -z "$REVIEW_ID" ]; then
-  echo "Review create succeeded but review_id is missing"
+  echo "$CREATE_RESPONSE"
   exit 1
 fi
 
-MAX_POLLS=60
-POLL_COUNT=0
-while true; do
-  POLL_COUNT=$((POLL_COUNT + 1))
-  if [ "$POLL_COUNT" -gt "$MAX_POLLS" ]; then
-    echo "Polling timed out after $MAX_POLLS attempts for review $REVIEW_ID" >&2
-    exit 1
+scripts/poll_review.sh \
+  --review-id "$REVIEW_ID" \
+  --max-attempts 120 \
+  --sleep-seconds 30 \
+  --output-file /tmp/review_api.result.json
+
+cat /tmp/review_api.result.json
+
+# Example feedback posts after deciding incorporate true/false per comment.
+jq -c '.comments[]?' /tmp/review_api.result.json | while read -r comment; do
+  COMMENT_ID=$(echo "$comment" | jq -r '.comment_id // empty')
+  if [ -z "$COMMENT_ID" ]; then
+    continue
   fi
-
-  REVIEW_RESPONSE=$(curl -sS \
-    -H "Authorization: Bearer $PROPEL_API_KEY" \
-    "https://api.propelcode.ai/v1/reviews/$REVIEW_ID")
-
-  # Strip control characters (U+0000-U+001F) before parsing to work around
-  # API responses that embed raw tabs/newlines inside JSON string values.
-  # The status field is an enum (queued|running|completed|failed) so this is lossless.
-  STATUS=$(printf '%s' "$REVIEW_RESPONSE" | tr -d '\000-\037' | jq -r '.status // empty' 2>/dev/null)
-  if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
-    echo "$REVIEW_RESPONSE"
-    break
-  fi
-
-  if [ -z "$STATUS" ]; then
-    echo "Warning: could not parse review status (poll $POLL_COUNT/$MAX_POLLS)" >&2
-  fi
-
-  sleep 30
+  scripts/post_comment_feedback.sh \
+    --review-id "$REVIEW_ID" \
+    --comment-id "$COMMENT_ID" \
+    --incorporated true \
+    --notes "Applied in this branch."
 done
 ```
 
@@ -329,9 +301,8 @@ If review creation returns `401`, `403`, or `404`, do all of the following:
 
 - Do not log or expose tokens in output.
 - Always use `https://api.propelcode.ai` until told otherwise.
-- Only use `POST /v1/reviews`, `GET /v1/reviews/:review_id`, and
-  `POST /v1/reviews/:review_id/comments/feedback`.
-- Poll review status every 30 seconds to avoid tight loops.
+- Use `scripts/create_review.sh`, `scripts/poll_review.sh`, and
+  `scripts/post_comment_feedback.sh` instead of inline curl commands.
 - The agent must decide whether each comment is valid, incorporate fixes when
   valid, and report feedback automatically via the feedback endpoint using the
   `comment_id` from the review response (no user confirmation required).
