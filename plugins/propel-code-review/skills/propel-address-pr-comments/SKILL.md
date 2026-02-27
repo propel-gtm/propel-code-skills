@@ -9,7 +9,26 @@ metadata:
 
 Guide to find the open PR for the current branch and address its comments with gh CLI. Run all `gh` commands with elevated network access.
 
-## 0) Execution order (fetch first, then ask mode)
+## 0) One-time approval setup (do not repeat every run)
+
+Use one-time approval/trust setup so this skill does not perform separate permission checks every run.
+
+If your client supports prefix-based trust/approval, approve these once:
+- `python3 scripts/fetch_comments.py`
+- `gh auth status`
+- `gh pr view`
+- `gh api graphql`
+
+Runtime rules:
+- Do not run a standalone permission-check command on every invocation.
+- Start directly with comment fetch: `python3 scripts/fetch_comments.py > /tmp/pr_comments_latest.json`.
+- Then parse/inspect JSON (`jq` is local-only): `jq -r '[.conversation_comments[]?, .reviews[]?, .review_threads[].comments.nodes[]?] | ...' /tmp/pr_comments_latest.json`.
+- If a `gh`/fetch command is blocked by sandboxing, rerun that command with `sandbox_permissions=require_escalated` immediately.
+- Run `gh auth status` only for first-time setup or when a `gh` command fails with auth errors.
+
+If the user provides a repo-specific variant (for example `cd /Users/tony/.codex/worktrees/e8af/propel-gtm && python3 /Users/tony/.codex/skills/propel-address-pr-comments/scripts/fetch_comments.py > /tmp/pr5116_comments_latest.json`), follow it exactly.
+
+## 1) Execution order (fetch first, then ask mode)
 
 Execution order:
 1. Fetch and filter Propel-authored comments first.
@@ -45,13 +64,13 @@ When no structured severity is present in fetched GitHub comments:
   - `info`: style, naming, docs, non-blocking suggestions
 
 Prerequisites:
-- **gh CLI**: ensure `gh` is authenticated (for example, run `gh auth login` once), then run `gh auth status` with escalated permissions (include workflow/repo scopes) so `gh` commands succeed. If sandboxing blocks `gh auth status`, rerun it with `sandbox_permissions=require_escalated`.
+- **gh CLI**: authenticate once with `gh auth login`. Do not run `gh auth status` every run; use it only for first-time setup or when `gh` returns auth errors. Keep `gh` commands on elevated permissions, and if sandboxing blocks a command, rerun with `sandbox_permissions=require_escalated`.
 - **PROPEL_API_KEY**: check that the `PROPEL_API_KEY` environment variable is set (for example, run `if [ -n "$PROPEL_API_KEY" ]; then echo "PROPEL_API_KEY is set"; else echo "PROPEL_API_KEY is not set"; fi`). If it is not set, tell the user to open https://app.propelcode.ai/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write, generate a token (scopes are pre-filled), and paste it back. Then export it for the session: `export PROPEL_API_KEY="<token>"`.
 
-## 1) Inspect comments needing attention
+## 2) Inspect comments needing attention
 - Run scripts/fetch_comments.py which will print out all the comments and review threads on the PR
 
-## 2) Build candidate findings set
+## 3) Build candidate findings set
 - Filter to eligible comments based on scope rules above.
 - Always present the comment inventory in this standardized format, regardless of PR size:
   - First line: `I found <N> Propel comments.`
@@ -61,7 +80,7 @@ Prerequisites:
 - If a comment has no structured severity, infer severity first and then use the same format.
 - If there are no eligible comments, report that and stop.
 
-## 3) Ask for mode (after showing comments)
+## 4) Ask for mode (after showing comments)
 - If the user already explicitly chose a mode in the current request, use it and skip this question.
 - Otherwise ask using this exact structure:
 ```text
@@ -74,7 +93,7 @@ Reply with 1, 2, or 3.
 - Before making any code edits, state the execution plan in one line:
   - `mode`, and that user can reply `change mode` to override.
 
-## 4) Execute by mode
+## 5) Execute by mode
 
 ### `ALL_COMMENTS`
 - Address all eligible actionable Propel-authored comments.
@@ -93,7 +112,7 @@ Reply with 1, 2, or 3.
 - Ask the user which numbered comments should be addressed.
 - Select the chosen comments for implementation.
 
-## 5) Apply fixes and report
+## 6) Apply fixes and report
 - Implement approved comments according to mode outcome.
 - Summarize:
   - mode used

@@ -20,7 +20,7 @@ import sys
 from urllib.parse import urlparse
 from typing import Any
 
-from command_helpers import CommandError, run_cmd, run_json
+from command_helpers import CommandError, run_json
 
 COMMAND_TIMEOUT_SECONDS = 120
 
@@ -95,12 +95,12 @@ query(
 }
 """
 
-def _ensure_gh_authenticated() -> None:
-    try:
-        run_cmd(["gh", "auth", "status"], timeout_seconds=COMMAND_TIMEOUT_SECONDS)
-    except CommandError:
-        print("run `gh auth login` to authenticate the GitHub CLI", file=sys.stderr)
-        raise RuntimeError("gh auth status failed; run `gh auth login` to authenticate the GitHub CLI") from None
+def _format_command_error(exc: CommandError) -> str:
+    msg = str(exc)
+    lower = msg.lower()
+    if "not logged into any github hosts" in lower or "gh auth login" in lower:
+        return f"{msg}\nRun `gh auth login` and retry."
+    return msg
 
 
 def gh_pr_view_json(fields: str) -> dict[str, Any]:
@@ -235,10 +235,16 @@ def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
 
 
 def main() -> None:
-    _ensure_gh_authenticated()
-    owner, repo, number = get_current_pr_ref()
-    result = fetch_all(owner, repo, number)
-    print(json.dumps(result, indent=2))
+    try:
+        owner, repo, number = get_current_pr_ref()
+        result = fetch_all(owner, repo, number)
+        print(json.dumps(result, indent=2))
+    except CommandError as exc:
+        print(_format_command_error(exc), file=sys.stderr)
+        raise SystemExit(1)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
