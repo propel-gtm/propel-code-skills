@@ -280,7 +280,7 @@ POLL_COUNT=0
 while true; do
   POLL_COUNT=$((POLL_COUNT + 1))
   if [ "$POLL_COUNT" -gt "$MAX_POLLS" ]; then
-    echo "Polling timed out after $MAX_POLLS attempts for review $REVIEW_ID"
+    echo "Polling timed out after $MAX_POLLS attempts for review $REVIEW_ID" >&2
     exit 1
   fi
 
