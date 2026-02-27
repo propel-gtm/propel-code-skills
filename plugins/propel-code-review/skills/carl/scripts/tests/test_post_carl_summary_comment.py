@@ -12,6 +12,7 @@ from post_carl_summary_comment import (
     MARKER,
     ScriptError,
     _parse_review_ids,
+    _post_pending_run_via_propel_api,
     _post_summary_via_propel_api,
     build_comment_body,
     main,
@@ -304,8 +305,9 @@ def test_main_returns_error_code_on_gh_failure(mock_run):
     assert rc == 1
 
 
+@patch("post_carl_summary_comment._post_pending_run_via_propel_api", return_value={"run_id": 101})
 @patch("subprocess.run")
-def test_main_no_open_pr_returns_zero(mock_run):
+def test_main_no_open_pr_persists_pending_run(mock_run, mock_pending_run):
     state = {"calls": []}
 
     def runner(cmd, input=None, capture_output=True, text=True, timeout=120):  # noqa: ARG001
@@ -326,26 +328,32 @@ def test_main_no_open_pr_returns_zero(mock_run):
             return _Proc(0, json.dumps([]), "")
         if cmd[:11] == ["gh", "pr", "list", "--repo", "base/repo", "--state", "open", "--head", "feature/no-pr", "--json", "number"]:
             return _Proc(0, json.dumps([]), "")
+        if cmd[:3] == ["git", "rev-parse", "HEAD"]:
+            return _Proc(0, "abc123def456\n", "")
         raise AssertionError(f"Unhandled command: {cmd}")
 
     mock_run.side_effect = runner
-    rc = main(
-        [
-            "--status",
-            "COMPLETE",
-            "--iterations",
-            "1",
-            "--fixed",
-            "1",
-            "--deferred",
-            "0",
-            "--remaining",
-            "0",
-            "--checks",
-            "passed",
-        ]
-    )
+    with patch.dict(os.environ, {"PROPEL_API_KEY": "rev_test_key"}):
+        rc = main(
+            [
+                "--status",
+                "COMPLETE",
+                "--iterations",
+                "1",
+                "--fixed",
+                "1",
+                "--deferred",
+                "0",
+                "--remaining",
+                "0",
+                "--checks",
+                "passed",
+            ]
+        )
     assert rc == 0
+    assert mock_pending_run.call_count == 1
+    assert mock_pending_run.call_args.kwargs["repository"] == "base/repo"
+    assert mock_pending_run.call_args.kwargs["head_commit_sha"] == "abc123def456"
 
 
 @patch("subprocess.run")
@@ -395,6 +403,42 @@ def test_post_summary_via_propel_api_success():
     assert payload["repository"] == "owner/repo"
     assert payload["pr_number"] == 42
     assert payload["marker"] == MARKER
+
+
+def test_post_pending_run_via_propel_api_success():
+    with patch(
+        "post_carl_summary_comment.urlrequest.urlopen",
+        return_value=_FakeHTTPResponse({"run_id": 101, "status": "COMPLETE"}),
+    ) as mock_urlopen:
+        result = _post_pending_run_via_propel_api(
+            api_base_url="https://api.propelcode.ai",
+            api_key="rev_test",
+            repository="owner/repo",
+            branch="feature/test",
+            head_commit_sha="abc123",
+            status="COMPLETE",
+            base="main",
+            iterations=1,
+            fixed=1,
+            deferred=0,
+            remaining=0,
+            checks="passed",
+            review_ids=["r1"],
+            notes="done",
+            marker=MARKER,
+            body=f"{MARKER}\nhello",
+        )
+
+    assert result["run_id"] == 101
+    request_obj = mock_urlopen.call_args.args[0]
+    assert request_obj.full_url == "https://api.propelcode.ai/v1/reviews/carl-runs"
+    assert request_obj.get_method() == "POST"
+
+    payload = json.loads(request_obj.data.decode("utf-8"))
+    assert payload["repository"] == "owner/repo"
+    assert payload["branch"] == "feature/test"
+    assert payload["head_commit_sha"] == "abc123"
+    assert payload["status"] == "COMPLETE"
 
 
 @patch("subprocess.run")
