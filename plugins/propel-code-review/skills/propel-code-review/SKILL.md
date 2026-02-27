@@ -275,15 +275,30 @@ if [ -z "$REVIEW_ID" ]; then
   exit 1
 fi
 
+MAX_POLLS=60
+POLL_COUNT=0
 while true; do
+  POLL_COUNT=$((POLL_COUNT + 1))
+  if [ "$POLL_COUNT" -gt "$MAX_POLLS" ]; then
+    echo "Polling timed out after $MAX_POLLS attempts for review $REVIEW_ID" >&2
+    exit 1
+  fi
+
   REVIEW_RESPONSE=$(curl -sS \
     -H "Authorization: Bearer $PROPEL_API_KEY" \
     "https://api.propelcode.ai/v1/reviews/$REVIEW_ID")
 
-  STATUS=$(echo "$REVIEW_RESPONSE" | jq -r '.status')
+  # Strip control characters (U+0000-U+001F) before parsing to work around
+  # API responses that embed raw tabs/newlines inside JSON string values.
+  # The status field is an enum (queued|running|completed|failed) so this is lossless.
+  STATUS=$(printf '%s' "$REVIEW_RESPONSE" | tr -d '\000-\037' | jq -r '.status // empty' 2>/dev/null)
   if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
     echo "$REVIEW_RESPONSE"
     break
+  fi
+
+  if [ -z "$STATUS" ]; then
+    echo "Warning: could not parse review status (poll $POLL_COUNT/$MAX_POLLS)" >&2
   fi
 
   sleep 30
