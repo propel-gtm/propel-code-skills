@@ -17,7 +17,7 @@ Run async, diff-based code reviews via the production API and retrieve comments.
 Before rollout to a new workspace/repo, run this from the target repository root:
 
 ```bash
-scripts/smoke_test_permissions.sh
+plugins/propel-code-review/skills/propel-code-review/scripts/smoke_test_permissions.sh
 ```
 
 It validates:
@@ -249,7 +249,7 @@ CREATE_RESPONSE=$(
     --base-commit "$BASE_COMMIT"
 )
 
-REVIEW_ID=$(echo "$CREATE_RESPONSE" | jq -r '.review_id')
+REVIEW_ID=$(echo "$CREATE_RESPONSE" | jq -r '.review_id // empty')
 if [ -z "$REVIEW_ID" ]; then
   echo "$CREATE_RESPONSE"
   exit 1

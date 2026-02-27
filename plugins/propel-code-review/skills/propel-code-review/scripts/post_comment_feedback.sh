@@ -18,7 +18,9 @@ Options:
   -h, --help        Show this help
 
 Environment:
-  PROPEL_API_KEY    Required bearer token for Propel Review API
+  PROPEL_API_KEY      Required bearer token for Propel Review API
+  PROPEL_API_BASE_URL Optional API base URL override (preferred)
+  PROPEL_API_URL      Optional legacy API base URL override
 EOF
 }
 
@@ -27,32 +29,43 @@ COMMENT_ID=""
 INCORPORATED=""
 NOTES=""
 OUTPUT_FILE=""
-API_URL="${PROPEL_API_URL:-https://api.propelcode.ai}"
+API_URL="${PROPEL_API_BASE_URL:-${PROPEL_API_URL:-https://api.propelcode.ai}}"
+
+require_option_value() {
+  local opt="$1"
+  local value="${2-}"
+  if [[ -z "$value" || "$value" == --* ]]; then
+    echo "Missing value for $opt" >&2
+    usage >&2
+    exit 2
+  fi
+  printf '%s\n' "$value"
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --review-id)
-      REVIEW_ID="${2:-}"
+      REVIEW_ID="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
     --comment-id)
-      COMMENT_ID="${2:-}"
+      COMMENT_ID="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
     --incorporated)
-      INCORPORATED="${2:-}"
+      INCORPORATED="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
     --notes)
-      NOTES="${2:-}"
+      NOTES="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
     --output-file)
-      OUTPUT_FILE="${2:-}"
+      OUTPUT_FILE="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
     --api-url)
-      API_URL="${2:-}"
+      API_URL="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
     -h|--help)
@@ -100,15 +113,24 @@ PAYLOAD="$(jq -n \
 )"
 
 BODY_FILE="$(mktemp)"
-trap 'rm -f "$BODY_FILE"' EXIT
+CURL_CONFIG_FILE="$(mktemp)"
+chmod 600 "$CURL_CONFIG_FILE"
+trap 'rm -f "$BODY_FILE" "$CURL_CONFIG_FILE"' EXIT
+printf 'header = "Authorization: Bearer %s"\n' "$PROPEL_API_KEY" > "$CURL_CONFIG_FILE"
+printf 'header = "Content-Type: application/json"\n' >> "$CURL_CONFIG_FILE"
 
-HTTP_CODE="$(
+if ! HTTP_CODE="$(
   curl -sS -o "$BODY_FILE" -w "%{http_code}" \
+    --config "$CURL_CONFIG_FILE" \
     -X POST "$API_URL/v1/reviews/$REVIEW_ID/comments/feedback" \
-    -H "Authorization: Bearer $PROPEL_API_KEY" \
-    -H "Content-Type: application/json" \
     --data-binary "$PAYLOAD"
-)"
+)"; then
+  echo "Feedback post failed: transport-level request error." >&2
+  if [[ -s "$BODY_FILE" ]]; then
+    cat "$BODY_FILE" >&2
+  fi
+  exit 1
+fi
 
 RESPONSE="$(cat "$BODY_FILE")"
 

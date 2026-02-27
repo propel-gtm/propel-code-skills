@@ -32,7 +32,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
-API_URL="${PROPEL_API_URL:-https://api.propelcode.ai}"
+API_URL="${PROPEL_API_BASE_URL:-${PROPEL_API_URL:-https://api.propelcode.ai}}"
 BASE_BRANCH=""
 REPO_SLUG=""
 BAD_REPO=""
