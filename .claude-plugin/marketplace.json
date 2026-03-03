@@ -23,6 +23,36 @@
         "agent-skill"
       ],
       "category": "developer-tools"
+    },
+    {
+      "name": "carl",
+      "source": "./plugins/propel-code-review",
+      "description": "Continuously run Propel code review, fix valid comments, and re-review until there are no remaining comments.",
+      "version": "1.0.0",
+      "keywords": [
+        "propel",
+        "code-review",
+        "automation",
+        "agent-skill",
+        "loop",
+        "carl"
+      ],
+      "category": "developer-tools"
+    },
+    {
+      "name": "propel-address-pr-comments",
+      "source": "./plugins/propel-code-review",
+      "description": "Help address Propel Code AI review/issue comments on the open GitHub PR for the current branch using gh CLI.",
+      "version": "1.0.0",
+      "keywords": [
+        "propel",
+        "code-review",
+        "pull-request",
+        "github",
+        "comments",
+        "agent-skill"
+      ],
+      "category": "developer-tools"
     }
   ]
 }
