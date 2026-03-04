@@ -62,7 +62,7 @@ while [[ $# -gt 0 ]]; do
       API_URL="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
-    -h|--help)
+    -h | --help)
       usage
       exit 0
       ;;
@@ -104,7 +104,7 @@ BODY_FILE="$(mktemp)"
 CURL_CONFIG_FILE="$(mktemp)"
 chmod 600 "$CURL_CONFIG_FILE"
 trap 'rm -f "$BODY_FILE" "$CURL_CONFIG_FILE"' EXIT
-printf 'header = "Authorization: Bearer %s"\n' "$PROPEL_API_KEY" > "$CURL_CONFIG_FILE"
+printf 'header = "Authorization: Bearer %s"\n' "$PROPEL_API_KEY" >"$CURL_CONFIG_FILE"
 
 for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
   if ! HTTP_CODE="$(
@@ -143,7 +143,7 @@ for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
 
   if [[ "$REVIEW_STATUS" == "completed" || "$REVIEW_STATUS" == "failed" ]]; then
     if [[ -n "$OUTPUT_FILE" ]]; then
-      printf '%s\n' "$SANITIZED_RESPONSE" > "$OUTPUT_FILE"
+      printf '%s\n' "$SANITIZED_RESPONSE" >"$OUTPUT_FILE"
     fi
     printf '%s\n' "$SANITIZED_RESPONSE"
     if [[ "$REVIEW_STATUS" == "failed" ]]; then

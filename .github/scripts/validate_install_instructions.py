@@ -3,36 +3,16 @@
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+
+from metadata_common import load_json, resolve_relative_path
 
 
 RE_CODE_BLOCK = re.compile(r"```[^\n]*\n(?P<body>.*?)\n```", re.DOTALL)
 RE_SKILL_INSTALLER = re.compile(r"^\$skill-installer\s+(?P<slug>\S+)\s*$")
 RE_SKILL_BULLET = re.compile(r"^- `(?P<name>[^`]+)`:")
-
-
-def _load_json(path: Path) -> Any:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"{path}: invalid JSON ({exc})") from exc
-
-
-def _resolve_relative_path(base_dir: Path, rel_path: str) -> Path | None:
-    candidate = Path(rel_path)
-    if candidate.is_absolute():
-        return None
-
-    resolved = (base_dir / candidate).resolve()
-    try:
-        resolved.relative_to(base_dir)
-    except ValueError:
-        return None
-    return resolved
 
 
 def _extract_h3_section(markdown: str, heading: str) -> str | None:
@@ -94,7 +74,7 @@ def _read_expected_plugin_and_skill_names(
         return None, [], [], [f"{marketplace_path}: file does not exist"]
 
     try:
-        marketplace = _load_json(marketplace_path)
+        marketplace = load_json(marketplace_path)
     except ValueError as exc:
         return None, [], [], [str(exc)]
 
@@ -131,7 +111,7 @@ def _read_expected_plugin_and_skill_names(
             errors.append(f"{label}: missing or invalid `source`")
             continue
 
-        plugin_root = _resolve_relative_path(repo_root, source)
+        plugin_root = resolve_relative_path(repo_root, source)
         if plugin_root is None:
             errors.append(
                 f"{label}: source path must be repo-relative and not escape repo ({source})"
@@ -146,7 +126,7 @@ def _read_expected_plugin_and_skill_names(
             continue
 
         try:
-            plugin_manifest = _load_json(plugin_manifest_path)
+            plugin_manifest = load_json(plugin_manifest_path)
         except ValueError as exc:
             errors.append(str(exc))
             continue
@@ -165,7 +145,7 @@ def _read_expected_plugin_and_skill_names(
                 errors.append(f"{plugin_manifest_path}: each `skills` item must be a string")
                 continue
 
-            skill_root = _resolve_relative_path(plugin_root, skill_path)
+            skill_root = resolve_relative_path(plugin_root, skill_path)
             if skill_root is None:
                 errors.append(
                     f"{plugin_manifest_path}: invalid skill path (escapes plugin root): "

@@ -116,7 +116,7 @@ fi
 
 DIFF_FILE="$(mktemp)"
 trap 'rm -f "$DIFF_FILE"' EXIT
-git diff "$BASE_COMMIT" --no-color > "$DIFF_FILE"
+git diff "$BASE_COMMIT" --no-color >"$DIFF_FILE"
 
 if [[ ! -s "$DIFF_FILE" ]]; then
   echo "Diff is empty for base branch '$BASE_BRANCH'. Make a local change first, then re-run." >&2
@@ -140,10 +140,10 @@ submit_case() {
     jq -n --rawfile diff "$DIFF_FILE" --arg repo "$repo" --arg base "$BASE_COMMIT" \
       '{diff:$diff, repository:$repo, base_commit:$base}' \
       | curl -sS -o "$body_file" -w "%{http_code}" \
-          -H "Authorization: Bearer $token" \
-          -H "Content-Type: application/json" \
-          --data-binary @- \
-          "$API_URL/v1/reviews"
+        -H "Authorization: Bearer $token" \
+        -H "Content-Type: application/json" \
+        --data-binary @- \
+        "$API_URL/v1/reviews"
   )"; then
     echo "Error: Request failed for repo '$repo' (transport-level failure)." >&2
     rm -f "$body_file"

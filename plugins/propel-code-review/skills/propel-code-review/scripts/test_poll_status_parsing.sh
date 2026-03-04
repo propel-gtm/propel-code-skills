@@ -35,7 +35,7 @@ extract_status() {
 # extract_status_file: same logic but reads from a file, for cases where
 # the payload contains NUL bytes that bash variables cannot hold.
 extract_status_file() {
-  tr -d '\000-\037' < "$1" | jq -r '.status // empty' 2>/dev/null
+  tr -d '\000-\037' <"$1" | jq -r '.status // empty' 2>/dev/null
 }
 
 echo "=== Test Group 1: Clean JSON ==="
@@ -78,7 +78,7 @@ assert_eq "multiple control chars in message" "completed" "$STATUS"
 # NUL byte (0x00) — bash variables strip NULs, so write to a temp file
 # and use extract_status_file to test the real byte sequence.
 NUL_FILE=$(mktemp)
-printf '{"status":"completed","comments":[{"message":"a\x00b"}]}' > "$NUL_FILE"
+printf '{"status":"completed","comments":[{"message":"a\x00b"}]}' >"$NUL_FILE"
 STATUS=$(extract_status_file "$NUL_FILE")
 rm -f "$NUL_FILE"
 assert_eq "NUL byte in message field" "completed" "$STATUS"

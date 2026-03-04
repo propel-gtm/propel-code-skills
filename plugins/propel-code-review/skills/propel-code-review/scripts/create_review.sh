@@ -68,7 +68,7 @@ while [[ $# -gt 0 ]]; do
       API_URL="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
-    -h|--help)
+    -h | --help)
       usage
       exit 0
       ;;
@@ -106,15 +106,15 @@ if [[ ! -f "$DIFF_FILE" ]]; then
   exit 1
 fi
 
-DIFF_BYTES="$(wc -c < "$DIFF_FILE" | tr -d '[:space:]')"
+DIFF_BYTES="$(wc -c <"$DIFF_FILE" | tr -d '[:space:]')"
 echo "repo=$REPO_SLUG base=$BASE_COMMIT diff_bytes=$DIFF_BYTES" >&2
 
 BODY_FILE="$(mktemp)"
 CURL_CONFIG_FILE="$(mktemp)"
 chmod 600 "$CURL_CONFIG_FILE"
 trap 'rm -f "$BODY_FILE" "$CURL_CONFIG_FILE"' EXIT
-printf 'header = "Authorization: Bearer %s"\n' "$PROPEL_API_KEY" > "$CURL_CONFIG_FILE"
-printf 'header = "Content-Type: application/json"\n' >> "$CURL_CONFIG_FILE"
+printf 'header = "Authorization: Bearer %s"\n' "$PROPEL_API_KEY" >"$CURL_CONFIG_FILE"
+printf 'header = "Content-Type: application/json"\n' >>"$CURL_CONFIG_FILE"
 
 HTTP_CODE=""
 for ((attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)); do
@@ -146,9 +146,8 @@ done
 RESPONSE="$(cat "$BODY_FILE")"
 
 case "$HTTP_CODE" in
-  202)
-    ;;
-  401|403)
+  202) ;;
+  401 | 403)
     echo "Review create failed ($HTTP_CODE): refresh token and confirm scopes reviews:read + reviews:write." >&2
     echo "$RESPONSE" >&2
     exit 1
@@ -158,7 +157,7 @@ case "$HTTP_CODE" in
     echo "$RESPONSE" >&2
     exit 1
     ;;
-  400|413)
+  400 | 413)
     echo "Review create failed ($HTTP_CODE): fix request payload (or reduce diff size for 413)." >&2
     echo "$RESPONSE" >&2
     exit 1
@@ -183,7 +182,7 @@ if [[ -z "$REVIEW_ID" ]]; then
 fi
 
 if [[ -n "$OUTPUT_FILE" ]]; then
-  printf '%s\n' "$RESPONSE" > "$OUTPUT_FILE"
+  printf '%s\n' "$RESPONSE" >"$OUTPUT_FILE"
 fi
 
 printf '%s\n' "$RESPONSE"

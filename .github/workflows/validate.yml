@@ -45,6 +45,8 @@ jobs:
           plugins/propel-code-review/skills/propel-code-review/scripts/test_poll_status_parsing.sh
 
       - name: Run helper script contract tests
+        env:
+          PROPEL_API_BASE_URL: http://127.0.0.1:9
         run: |
           pytest plugins/propel-code-review/skills/propel-code-review/scripts/tests/test_review_helper_contracts.py
 
