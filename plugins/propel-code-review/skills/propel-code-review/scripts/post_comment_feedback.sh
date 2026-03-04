@@ -68,7 +68,7 @@ while [[ $# -gt 0 ]]; do
       API_URL="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
-    -h|--help)
+    -h | --help)
       usage
       exit 0
       ;;
@@ -101,23 +101,24 @@ if [[ "$INCORPORATED" != "true" && "$INCORPORATED" != "false" ]]; then
   exit 2
 fi
 
-PAYLOAD="$(jq -n \
-  --arg comment_id "$COMMENT_ID" \
-  --arg notes "$NOTES" \
-  --argjson incorporated "$INCORPORATED" \
-  'if $notes == "" then
-      {comment_id:$comment_id, incorporated:$incorporated}
-   else
-      {comment_id:$comment_id, incorporated:$incorporated, notes:$notes}
-   end'
+PAYLOAD="$(
+  jq -n \
+    --arg comment_id "$COMMENT_ID" \
+    --arg notes "$NOTES" \
+    --argjson incorporated "$INCORPORATED" \
+    'if $notes == "" then
+       {comment_id:$comment_id, incorporated:$incorporated}
+     else
+       {comment_id:$comment_id, incorporated:$incorporated, notes:$notes}
+     end'
 )"
 
 BODY_FILE="$(mktemp)"
 CURL_CONFIG_FILE="$(mktemp)"
 chmod 600 "$CURL_CONFIG_FILE"
 trap 'rm -f "$BODY_FILE" "$CURL_CONFIG_FILE"' EXIT
-printf 'header = "Authorization: Bearer %s"\n' "$PROPEL_API_KEY" > "$CURL_CONFIG_FILE"
-printf 'header = "Content-Type: application/json"\n' >> "$CURL_CONFIG_FILE"
+printf 'header = "Authorization: Bearer %s"\n' "$PROPEL_API_KEY" >"$CURL_CONFIG_FILE"
+printf 'header = "Content-Type: application/json"\n' >>"$CURL_CONFIG_FILE"
 
 if ! HTTP_CODE="$(
   curl -sS -o "$BODY_FILE" -w "%{http_code}" \
@@ -141,7 +142,7 @@ if [[ ! "$HTTP_CODE" =~ ^2 ]]; then
 fi
 
 if [[ -n "$OUTPUT_FILE" ]]; then
-  printf '%s\n' "$RESPONSE" > "$OUTPUT_FILE"
+  printf '%s\n' "$RESPONSE" >"$OUTPUT_FILE"
 fi
 
 printf '%s\n' "$RESPONSE"

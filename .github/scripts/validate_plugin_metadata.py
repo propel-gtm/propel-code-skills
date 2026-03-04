@@ -3,34 +3,14 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import Any
 
-
-def _load_json(path: Path) -> Any:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"{path}: invalid JSON ({exc})") from exc
-
+from metadata_common import load_json, resolve_relative_path
 
 def _missing_keys(obj: dict[str, Any], keys: tuple[str, ...]) -> list[str]:
     return [key for key in keys if key not in obj]
-
-
-def _resolve_relative_path(base_dir: Path, rel_path: str) -> Path | None:
-    candidate = Path(rel_path)
-    if candidate.is_absolute():
-        return None
-
-    resolved = (base_dir / candidate).resolve()
-    try:
-        resolved.relative_to(base_dir)
-    except ValueError:
-        return None
-    return resolved
 
 
 def main() -> int:
@@ -42,7 +22,7 @@ def main() -> int:
         errors.append(f"{marketplace_path}: file does not exist")
     else:
         try:
-            marketplace = _load_json(marketplace_path)
+            marketplace = load_json(marketplace_path)
         except ValueError as exc:
             errors.append(str(exc))
             marketplace = {}
@@ -75,7 +55,7 @@ def main() -> int:
                 errors.append(f"{label}: `source` must be a string")
                 continue
 
-            plugin_root = _resolve_relative_path(repo_root, source)
+            plugin_root = resolve_relative_path(repo_root, source)
             if plugin_root is None:
                 errors.append(
                     f"{label}: source path must be repository-relative and not escape repo ({source})"
@@ -94,7 +74,7 @@ def main() -> int:
                 continue
 
             try:
-                plugin_manifest = _load_json(plugin_manifest_path)
+                plugin_manifest = load_json(plugin_manifest_path)
             except ValueError as exc:
                 errors.append(str(exc))
                 continue
@@ -133,7 +113,7 @@ def main() -> int:
                     errors.append(f"{plugin_manifest_path}: each `skills` item must be a string")
                     continue
 
-                skill_root = _resolve_relative_path(plugin_root, skill_path)
+                skill_root = resolve_relative_path(plugin_root, skill_path)
                 if skill_root is None:
                     errors.append(
                         f"{plugin_manifest_path}: skill path must be plugin-relative and not "

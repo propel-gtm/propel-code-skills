@@ -30,3 +30,27 @@ jobs:
 
       - name: Validate plugin metadata
         run: python .github/scripts/validate_plugin_metadata.py
+
+      - name: Validate install instructions
+        run: python .github/scripts/validate_install_instructions.py
+
+      - name: Validate SKILL docs and duplicated helpers
+        run: python .github/scripts/validate_skill_docs_and_duplicates.py
+
+      - name: Install test dependencies
+        run: pip install pytest==8.4.2
+
+      - name: Run shell unit tests
+        run: |
+          plugins/propel-code-review/skills/propel-code-review/scripts/test_poll_status_parsing.sh
+
+      - name: Run helper script contract tests
+        env:
+          PROPEL_API_BASE_URL: http://127.0.0.1:9
+        run: |
+          pytest plugins/propel-code-review/skills/propel-code-review/scripts/tests/test_review_helper_contracts.py
+
+      - name: Run CARL script tests
+        run: |
+          PYTHONPATH=plugins/propel-code-review/skills/carl/scripts \
+          pytest plugins/propel-code-review/skills/carl/scripts/tests/test_post_carl_summary_comment.py
