@@ -6,7 +6,8 @@ from typing import Any
 
 # NOTE: This helper is intentionally duplicated across standalone skills.
 # If you update this file, mirror the same change in:
-# plugins/propel-code-review/skills/carl/scripts/command_helpers.py
+# - plugins/propel-code-review/skills/carl/scripts/command_helpers.py
+# - plugins/propel-code-review/skills/propel-address-pr-comments/scripts/command_helpers.py
 
 
 class CommandError(RuntimeError):
