@@ -12,6 +12,8 @@ Required:
   --base-commit    Base commit SHA
 
 Options:
+  --head-commit-sha  Optional HEAD commit SHA for local dedup context
+  --branch           Optional branch name for local dedup context
   --output-file    Write raw API response JSON to this file
   --max-attempts   Retry attempts for 5xx responses (default: 3)
   --api-url        Override API base URL (default: https://api.propelcode.ai)
@@ -28,6 +30,8 @@ DIFF_FILE=""
 REPO_SLUG=""
 BASE_COMMIT=""
 OUTPUT_FILE=""
+HEAD_COMMIT_SHA=""
+BRANCH_NAME=""
 MAX_ATTEMPTS=3
 API_URL="${PROPEL_API_BASE_URL:-${PROPEL_API_URL:-https://api.propelcode.ai}}"
 
@@ -58,6 +62,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --output-file)
       OUTPUT_FILE="$(require_option_value "$1" "${2-}")"
+      shift 2
+      ;;
+    --head-commit-sha)
+      HEAD_COMMIT_SHA="$(require_option_value "$1" "${2-}")"
+      shift 2
+      ;;
+    --branch)
+      BRANCH_NAME="$(require_option_value "$1" "${2-}")"
       shift 2
       ;;
     --max-attempts)
@@ -106,6 +118,8 @@ if [[ ! -f "$DIFF_FILE" ]]; then
   exit 1
 fi
 
+HEAD_COMMIT_SHA="$(printf '%s' "$HEAD_COMMIT_SHA" | tr '[:upper:]' '[:lower:]')"
+
 DIFF_BYTES="$(wc -c <"$DIFF_FILE" | tr -d '[:space:]')"
 echo "repo=$REPO_SLUG base=$BASE_COMMIT diff_bytes=$DIFF_BYTES" >&2
 
@@ -119,7 +133,15 @@ printf 'header = "Content-Type: application/json"\n' >>"$CURL_CONFIG_FILE"
 HTTP_CODE=""
 for ((attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)); do
   if ! HTTP_CODE="$(
-    jq -n --rawfile diff "$DIFF_FILE" --arg repo "$REPO_SLUG" --arg base "$BASE_COMMIT" '{diff:$diff, repository:$repo, base_commit:$base}' \
+    jq -n \
+      --rawfile diff "$DIFF_FILE" \
+      --arg repo "$REPO_SLUG" \
+      --arg base "$BASE_COMMIT" \
+      --arg head "$HEAD_COMMIT_SHA" \
+      --arg branch "$BRANCH_NAME" \
+      '({diff:$diff, repository:$repo, base_commit:$base}
+        + (if $head != "" then {head_commit_sha:$head} else {} end)
+        + (if $branch != "" then {branch:$branch} else {} end))' \
       | curl -sS -o "$BODY_FILE" -w "%{http_code}" \
         --config "$CURL_CONFIG_FILE" \
         --data-binary @- \
