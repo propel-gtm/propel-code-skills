@@ -325,6 +325,35 @@ def test_poll_review_failed_status_returns_exit_code_2(
     assert json.loads(result.stdout)["status"] == "failed"
 
 
+def test_poll_review_default_budget_is_fifteen_minutes(
+    mock_tooling: dict[str, Path | dict[str, str]]
+) -> None:
+    env = mock_tooling["env"]
+    sequence_file = mock_tooling["sequence_file"]
+    counter_file = mock_tooling["counter_file"]
+    assert isinstance(env, dict)
+    assert isinstance(sequence_file, Path)
+    assert isinstance(counter_file, Path)
+
+    _write_sequence(
+        sequence_file,
+        [(0, 200, '{"status":"running"}')],
+    )
+
+    result = _run_script(
+        "poll_review.sh",
+        [
+            "--review-id",
+            "review-123",
+        ],
+        env,
+    )
+
+    assert result.returncode == 1
+    assert "timed out after 30 polls (~900 seconds)" in result.stderr
+    assert counter_file.read_text(encoding="utf-8") == "30"
+
+
 def test_post_comment_feedback_contract(
     mock_tooling: dict[str, Path | dict[str, str]]
 ) -> None:

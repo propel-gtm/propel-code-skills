@@ -231,7 +231,7 @@ running this skill:
    - `404`: repository is not connected to the Propel workspace (or slug is wrong). Stop and ask user to connect/fix repo slug.
    - `400/413`: invalid request or diff too large. Stop and show actionable fix.
    - `5xx`: transient API error. Retry with bounded backoff, then stop and report if still failing.
-8. Poll with `scripts/poll_review.sh` every 30 seconds until status is
+8. Poll with `scripts/poll_review.sh` every 30 seconds for up to 15 minutes until status is
    `completed` or `failed`.
 9. Present comments to the user with file/line context.
 10. For each comment, determine whether it is valid and applicable to the code.
@@ -268,7 +268,7 @@ fi
 
 scripts/poll_review.sh \
   --review-id "$REVIEW_ID" \
-  --max-attempts 120 \
+  --max-attempts 30 \
   --sleep-seconds 30 \
   --output-file /tmp/review_api.result.json
 
