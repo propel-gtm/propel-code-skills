@@ -90,8 +90,8 @@ REVIEW_ID=$(echo "$CREATE_RESPONSE" | jq -r '.review_id // empty')
 
 ../propel-code-review/scripts/poll_review.sh \
   --review-id "$REVIEW_ID" \
-  --max-attempts 40 \
-  --sleep-seconds 3 \
+  --max-attempts 30 \
+  --sleep-seconds 30 \
   --output-file "$REVIEW_FILE"
 
 cat "$REVIEW_FILE"

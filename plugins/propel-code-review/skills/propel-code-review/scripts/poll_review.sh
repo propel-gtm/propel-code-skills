@@ -11,8 +11,8 @@ Required:
 
 Options:
   --output-file    Write final review JSON to this file
-  --max-attempts   Number of polling attempts (default: 40)
-  --sleep-seconds  Delay between polls in seconds (default: 3)
+  --max-attempts   Number of polling attempts (default: 30)
+  --sleep-seconds  Delay between polls in seconds (default: 30)
   --api-url        Override API base URL (default: https://api.propelcode.ai)
   -h, --help       Show this help
 
@@ -23,10 +23,14 @@ Environment:
 EOF
 }
 
+DEFAULT_POLL_TIMEOUT_SECONDS=900
+DEFAULT_SLEEP_SECONDS=30
+DEFAULT_MAX_ATTEMPTS=$((DEFAULT_POLL_TIMEOUT_SECONDS / DEFAULT_SLEEP_SECONDS))
+
 REVIEW_ID=""
 OUTPUT_FILE=""
-MAX_ATTEMPTS=40
-SLEEP_SECONDS=3
+MAX_ATTEMPTS=$DEFAULT_MAX_ATTEMPTS
+SLEEP_SECONDS=$DEFAULT_SLEEP_SECONDS
 API_URL="${PROPEL_API_BASE_URL:-${PROPEL_API_URL:-https://api.propelcode.ai}}"
 
 require_option_value() {
@@ -155,5 +159,5 @@ for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
   sleep "$SLEEP_SECONDS"
 done
 
-echo "timed out after $MAX_ATTEMPTS polls" >&2
+echo "timed out after $MAX_ATTEMPTS polls (~$((MAX_ATTEMPTS * SLEEP_SECONDS)) seconds)" >&2
 exit 1
