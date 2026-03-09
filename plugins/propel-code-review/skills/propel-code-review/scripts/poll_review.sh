@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  cat <<'EOF'
+  cat <<EOF
 Usage:
   poll_review.sh --review-id <uuid> [options]
 
@@ -11,8 +11,8 @@ Required:
 
 Options:
   --output-file    Write final review JSON to this file
-  --max-attempts   Number of polling attempts (default: 30)
-  --sleep-seconds  Delay between polls in seconds (default: 30)
+  --max-attempts   Number of polling attempts (default: ${DEFAULT_MAX_ATTEMPTS})
+  --sleep-seconds  Delay between polls in seconds (default: ${DEFAULT_SLEEP_SECONDS})
   --api-url        Override API base URL (default: https://api.propelcode.ai)
   -h, --help       Show this help
 
