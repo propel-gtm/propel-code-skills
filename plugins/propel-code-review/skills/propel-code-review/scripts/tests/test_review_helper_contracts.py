@@ -102,6 +102,10 @@ exit "$EXIT_CODE"
 """
 
 MOCK_SLEEP = """#!/usr/bin/env bash
+set -euo pipefail
+if [[ -n "${MOCK_SLEEP_CAPTURE:-}" ]]; then
+  printf '%s\\n' "$*" >> "$MOCK_SLEEP_CAPTURE"
+fi
 exit 0
 """
 
@@ -124,6 +128,7 @@ def mock_tooling(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
     stdin_capture = tmp_path / "curl_stdin_capture.txt"
     data_capture = tmp_path / "curl_data_capture.txt"
     url_capture = tmp_path / "curl_url_capture.txt"
+    sleep_capture = tmp_path / "sleep_capture.txt"
 
     env = os.environ.copy()
     env["PATH"] = f"{mock_bin}:{env.get('PATH', '')}"
@@ -133,6 +138,7 @@ def mock_tooling(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
     env["MOCK_CURL_STDIN_CAPTURE"] = str(stdin_capture)
     env["MOCK_CURL_DATA_CAPTURE"] = str(data_capture)
     env["MOCK_CURL_URL_CAPTURE"] = str(url_capture)
+    env["MOCK_SLEEP_CAPTURE"] = str(sleep_capture)
 
     return {
         "env": env,
@@ -141,6 +147,7 @@ def mock_tooling(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
         "stdin_capture": stdin_capture,
         "data_capture": data_capture,
         "url_capture": url_capture,
+        "sleep_capture": sleep_capture,
     }
 
 
@@ -325,6 +332,89 @@ def test_poll_review_failed_status_returns_exit_code_2(
     assert json.loads(result.stdout)["status"] == "failed"
 
 
+def test_poll_review_waits_for_terminal_status_even_when_progress_is_high(
+    mock_tooling: dict[str, Path | dict[str, str]]
+) -> None:
+    env = mock_tooling["env"]
+    sequence_file = mock_tooling["sequence_file"]
+    counter_file = mock_tooling["counter_file"]
+    sleep_capture = mock_tooling["sleep_capture"]
+    assert isinstance(env, dict)
+    assert isinstance(sequence_file, Path)
+    assert isinstance(counter_file, Path)
+    assert isinstance(sleep_capture, Path)
+
+    _write_sequence(
+        sequence_file,
+        [
+            (
+                0,
+                200,
+                '{"status":"running","estimated_progress_pct":99,"progress_is_estimated":true,"progress_message":"Reviewing","poll_after_ms":3000,"comments":[]}',
+            ),
+            (0, 200, '{"status":"completed","comments":[]}'),
+        ],
+    )
+
+    result = _run_script(
+        "poll_review.sh",
+        [
+            "--review-id",
+            "review-123",
+            "--max-attempts",
+            "2",
+            "--sleep-seconds",
+            "30",
+        ],
+        env,
+    )
+
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["status"] == "completed"
+    assert counter_file.read_text(encoding="utf-8") == "2"
+    assert sleep_capture.read_text(encoding="utf-8").splitlines() == ["30"]
+
+
+def test_poll_review_uses_api_poll_after_hint_as_lower_bound(
+    mock_tooling: dict[str, Path | dict[str, str]]
+) -> None:
+    env = mock_tooling["env"]
+    sequence_file = mock_tooling["sequence_file"]
+    sleep_capture = mock_tooling["sleep_capture"]
+    assert isinstance(env, dict)
+    assert isinstance(sequence_file, Path)
+    assert isinstance(sleep_capture, Path)
+
+    _write_sequence(
+        sequence_file,
+        [
+            (
+                0,
+                200,
+                '{"status":"running","estimated_progress_pct":25,"progress_is_estimated":true,"progress_message":"Queued behind other work","poll_after_ms":12000}',
+            ),
+            (0, 200, '{"status":"completed","comments":[]}'),
+        ],
+    )
+
+    result = _run_script(
+        "poll_review.sh",
+        [
+            "--review-id",
+            "review-123",
+            "--max-attempts",
+            "2",
+            "--sleep-seconds",
+            "5",
+        ],
+        env,
+    )
+
+    assert result.returncode == 0
+    assert "next_poll=12s" in result.stderr
+    assert sleep_capture.read_text(encoding="utf-8").splitlines() == ["12"]
+
+
 def test_poll_review_default_budget_is_fifteen_minutes(
     mock_tooling: dict[str, Path | dict[str, str]]
 ) -> None:
@@ -350,7 +440,7 @@ def test_poll_review_default_budget_is_fifteen_minutes(
     )
 
     assert result.returncode == 1
-    assert "timed out after 30 polls (~900 seconds)" in result.stderr
+    assert "timed out after 30 polls (~900 seconds of waiting)" in result.stderr
     assert counter_file.read_text(encoding="utf-8") == "30"
 
 

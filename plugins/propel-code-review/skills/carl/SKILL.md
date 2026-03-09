@@ -25,7 +25,7 @@ If `propel-code-review` is unavailable, stop and report that dependency is missi
 ## Loop Workflow
 
 1. Determine the base branch and compute the diff: `git diff <base>...HEAD`.
-2. Run `propel-code-review` on that diff and wait for completion (`completed` or `failed`) before doing anything else.
+2. Run `propel-code-review` on that diff and wait for terminal `status` (`completed` or `failed`) before doing anything else. Treat review progress fields as informational only.
 3. If `propel-code-review` returns permission/access errors (`401`, `403`, `404`, "Repository not found"), stop immediately with `BLOCKED` and report the exact repo slug plus required user action.
 4. If review status is `failed`, retry once. If it fails again, stop and report the API error.
 5. If there are zero comments, stop and report completion.

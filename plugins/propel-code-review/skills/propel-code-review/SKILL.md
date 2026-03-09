@@ -146,6 +146,10 @@ Response (200):
 {
   "review_id": "uuid",
   "status": "queued|running|completed|failed",
+  "estimated_progress_pct": 42,
+  "progress_is_estimated": true,
+  "progress_message": "Reviewing",
+  "poll_after_ms": 3000,
   "comments": [
     {
       "comment_id": "string",
@@ -161,6 +165,11 @@ Response (200):
   }
 }
 ```
+
+Progress handling:
+- `status` is the only terminal signal. Continue polling until it is `completed` or `failed`.
+- Do not infer completion from `estimated_progress_pct`, `progress_message`, or an empty `comments` array.
+- `poll_after_ms` is a pacing hint from the API. Use it to avoid tight polling, but keep a client-side floor so you do not hammer the endpoint if the server asks for very short intervals.
 
 ### Post Comment Feedback
 
@@ -193,7 +202,9 @@ Paths below are relative to this skill directory:
 
 - `scripts/create_review.sh` wraps `POST /v1/reviews`.
 - `scripts/poll_review.sh` wraps polling `GET /v1/reviews/:review_id` until
-  terminal status (`completed` or `failed`) or timeout.
+  terminal status (`completed` or `failed`) or timeout, while logging progress
+  fields and applying the API's `poll_after_ms` hint without polling more
+  aggressively than the configured client floor.
 - `scripts/post_comment_feedback.sh` wraps
   `POST /v1/reviews/:review_id/comments/feedback`.
 
@@ -231,8 +242,11 @@ running this skill:
    - `404`: repository is not connected to the Propel workspace (or slug is wrong). Stop and ask user to connect/fix repo slug.
    - `400/413`: invalid request or diff too large. Stop and show actionable fix.
    - `5xx`: transient API error. Retry with bounded backoff, then stop and report if still failing.
-8. Poll with `scripts/poll_review.sh` every 30 seconds for up to 15 minutes until status is
-   `completed` or `failed`.
+8. Poll with `scripts/poll_review.sh` until `status` is `completed` or `failed`.
+   The helper logs `estimated_progress_pct` / `progress_message` for visibility,
+   ignores those fields for termination, and uses `poll_after_ms` only as a
+   pacing hint. Keep the client floor at `30` seconds unless you have a reason
+   to poll more aggressively.
 9. Present comments to the user with file/line context.
 10. For each comment, determine whether it is valid and applicable to the code.
 11. If valid, incorporate the change in the codebase. If invalid, do not change
@@ -314,6 +328,8 @@ If review creation returns `401`, `403`, or `404`, do all of the following:
 - Always use `https://api.propelcode.ai` until told otherwise.
 - Use `scripts/create_review.sh`, `scripts/poll_review.sh`, and
   `scripts/post_comment_feedback.sh` instead of inline curl commands.
+- Treat `estimated_progress_pct`, `progress_message`, and `poll_after_ms` as
+  advisory progress metadata. Only terminal `status` ends the wait loop.
 - The agent must decide whether each comment is valid, incorporate fixes when
   valid, and report feedback automatically via the feedback endpoint using the
   `comment_id` from the review response (no user confirmation required).

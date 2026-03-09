@@ -12,7 +12,9 @@ Required:
 Options:
   --output-file    Write final review JSON to this file
   --max-attempts   Number of polling attempts (default: ${DEFAULT_MAX_ATTEMPTS})
-  --sleep-seconds  Delay between polls in seconds (default: ${DEFAULT_SLEEP_SECONDS})
+  --sleep-seconds  Minimum delay between polls in seconds; actual delay is the
+                   larger of this value and API poll_after_ms when present
+                   (default: ${DEFAULT_SLEEP_SECONDS})
   --api-url        Override API base URL (default: https://api.propelcode.ai)
   -h, --help       Show this help
 
@@ -32,6 +34,27 @@ OUTPUT_FILE=""
 MAX_ATTEMPTS=$DEFAULT_MAX_ATTEMPTS
 SLEEP_SECONDS=$DEFAULT_SLEEP_SECONDS
 API_URL="${PROPEL_API_BASE_URL:-${PROPEL_API_URL:-https://api.propelcode.ai}}"
+
+extract_json_field() {
+  local json="$1"
+  local filter="$2"
+  printf '%s' "$json" | jq -r "$filter" 2>/dev/null || true
+}
+
+next_sleep_seconds() {
+  local client_floor_seconds="$1"
+  local poll_after_ms="${2-}"
+  local delay_seconds="$client_floor_seconds"
+
+  if [[ "$poll_after_ms" =~ ^[0-9]+$ ]] && [[ "$poll_after_ms" -gt 0 ]]; then
+    local api_delay_seconds=$(((poll_after_ms + 999) / 1000))
+    if [[ "$api_delay_seconds" -gt "$delay_seconds" ]]; then
+      delay_seconds="$api_delay_seconds"
+    fi
+  fi
+
+  printf '%s\n' "$delay_seconds"
+}
 
 require_option_value() {
   local opt="$1"
@@ -109,6 +132,7 @@ CURL_CONFIG_FILE="$(mktemp)"
 chmod 600 "$CURL_CONFIG_FILE"
 trap 'rm -f "$BODY_FILE" "$CURL_CONFIG_FILE"' EXIT
 printf 'header = "Authorization: Bearer %s"\n' "$PROPEL_API_KEY" >"$CURL_CONFIG_FILE"
+TOTAL_WAIT_SECONDS=0
 
 for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
   if ! HTTP_CODE="$(
@@ -118,6 +142,7 @@ for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
   )"; then
     if [[ "$i" -lt "$MAX_ATTEMPTS" ]]; then
       sleep "$SLEEP_SECONDS"
+      TOTAL_WAIT_SECONDS=$((TOTAL_WAIT_SECONDS + SLEEP_SECONDS))
       continue
     fi
     echo "poll failed: transport-level request error after bounded retries" >&2
@@ -129,6 +154,7 @@ for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
 
   if [[ "$HTTP_CODE" =~ ^5 ]] && [[ "$i" -lt "$MAX_ATTEMPTS" ]]; then
     sleep "$SLEEP_SECONDS"
+    TOTAL_WAIT_SECONDS=$((TOTAL_WAIT_SECONDS + SLEEP_SECONDS))
     continue
   fi
 
@@ -141,9 +167,14 @@ for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
   RESPONSE="$(cat "$BODY_FILE")"
   SANITIZED_RESPONSE="$(printf '%s' "$RESPONSE" | tr -d '\000-\037')"
   # If jq parsing fails, keep polling rather than crashing on transient non-JSON responses.
-  REVIEW_STATUS="$(printf '%s' "$SANITIZED_RESPONSE" | jq -r '.status // empty' 2>/dev/null || echo '')"
+  REVIEW_STATUS="$(extract_json_field "$SANITIZED_RESPONSE" '.status // empty')"
+  ESTIMATED_PROGRESS_PCT="$(extract_json_field "$SANITIZED_RESPONSE" '.estimated_progress_pct // empty')"
+  PROGRESS_IS_ESTIMATED="$(extract_json_field "$SANITIZED_RESPONSE" 'if has("progress_is_estimated") then .progress_is_estimated else empty end')"
+  PROGRESS_MESSAGE="$(extract_json_field "$SANITIZED_RESPONSE" '.progress_message // empty')"
+  POLL_AFTER_MS="$(extract_json_field "$SANITIZED_RESPONSE" '.poll_after_ms // empty')"
+  NEXT_DELAY_SECONDS="$(next_sleep_seconds "$SLEEP_SECONDS" "$POLL_AFTER_MS")"
   NOW="$(date +%H:%M:%S)"
-  echo "$NOW poll=$i status=${REVIEW_STATUS:-unknown}" >&2
+  echo "$NOW poll=$i status=${REVIEW_STATUS:-unknown} progress=${ESTIMATED_PROGRESS_PCT:-unknown}% estimated=${PROGRESS_IS_ESTIMATED:-unknown} message=${PROGRESS_MESSAGE:-none} next_poll=${NEXT_DELAY_SECONDS}s" >&2
 
   if [[ "$REVIEW_STATUS" == "completed" || "$REVIEW_STATUS" == "failed" ]]; then
     if [[ -n "$OUTPUT_FILE" ]]; then
@@ -156,8 +187,9 @@ for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
     exit 0
   fi
 
-  sleep "$SLEEP_SECONDS"
+  sleep "$NEXT_DELAY_SECONDS"
+  TOTAL_WAIT_SECONDS=$((TOTAL_WAIT_SECONDS + NEXT_DELAY_SECONDS))
 done
 
-echo "timed out after $MAX_ATTEMPTS polls (~$((MAX_ATTEMPTS * SLEEP_SECONDS)) seconds)" >&2
+echo "timed out after $MAX_ATTEMPTS polls (~${TOTAL_WAIT_SECONDS} seconds of waiting)" >&2
 exit 1
