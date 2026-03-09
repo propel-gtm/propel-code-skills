@@ -104,7 +104,9 @@ Request body:
 {
   "diff": "string (required)",
   "repository": "string (required)",
-  "base_commit": "string (required)"
+  "base_commit": "string (required)",
+  "head_commit_sha": "string (optional)",
+  "branch": "string (optional)"
 }
 ```
 
@@ -112,6 +114,8 @@ Constraints:
 - `diff` max size: 1,000,000 bytes
 - `repository` max length: 255
 - `base_commit` max length: 255
+- `head_commit_sha` max length: 255
+- `branch` max length: 255
 
 Notes:
 - `base_commit` should be a commit that exists in the remote repo history
@@ -213,24 +217,27 @@ running this skill:
    - `BASE_BRANCH=$(gh pr view --json baseRefName -q '.baseRefName' 2>/dev/null || git remote show origin | sed -n '/HEAD branch/s/.*: //p')`
 2. Compute the base commit (must exist in the remote repo history):
    - `git rev-parse "$BASE_BRANCH"`
-3. Compute the repository slug:
+3. Compute the current head commit and branch (for local review dedup context):
+   - `git rev-parse HEAD`
+   - `git rev-parse --abbrev-ref HEAD`
+4. Compute the repository slug:
    - `git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\\.git$//'`
-4. Generate the diff:
+5. Generate the diff:
    - `git diff "$BASE_BRANCH" > /tmp/review_api.diff`
-5. Call `scripts/create_review.sh` with diff, base commit, and repository slug.
-6. Handle create-review failures before polling (script exits non-zero and
+6. Call `scripts/create_review.sh` with diff, base commit, repository slug, head commit, and branch.
+7. Handle create-review failures before polling (script exits non-zero and
    prints the API response body):
    - `401/403`: token invalid/expired/missing scope. Stop and ask user to refresh token.
    - `404`: repository is not connected to the Propel workspace (or slug is wrong). Stop and ask user to connect/fix repo slug.
    - `400/413`: invalid request or diff too large. Stop and show actionable fix.
    - `5xx`: transient API error. Retry with bounded backoff, then stop and report if still failing.
-7. Poll with `scripts/poll_review.sh` every 30 seconds until status is
+8. Poll with `scripts/poll_review.sh` every 30 seconds until status is
    `completed` or `failed`.
-8. Present comments to the user with file/line context.
-9. For each comment, determine whether it is valid and applicable to the code.
-10. If valid, incorporate the change in the codebase. If invalid, do not change
+9. Present comments to the user with file/line context.
+10. For each comment, determine whether it is valid and applicable to the code.
+11. If valid, incorporate the change in the codebase. If invalid, do not change
    the codebase.
-11. Immediately call `scripts/post_comment_feedback.sh` for each comment with
+12. Immediately call `scripts/post_comment_feedback.sh` for each comment with
     `comment_id`, `incorporated` true/false, and brief `notes` explaining the
     decision. Do not wait for user confirmation.
 
@@ -239,6 +246,8 @@ running this skill:
 ```bash
 BASE_BRANCH=$(gh pr view --json baseRefName -q '.baseRefName' 2>/dev/null || git remote show origin | sed -n '/HEAD branch/s/.*: //p')
 BASE_COMMIT=$(git rev-parse "$BASE_BRANCH")
+HEAD_COMMIT=$(git rev-parse HEAD)
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
 REPO_SLUG=$(git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\\.git$//')
 git diff "$BASE_BRANCH" > /tmp/review_api.diff
 
@@ -246,7 +255,9 @@ CREATE_RESPONSE=$(
   scripts/create_review.sh \
     --diff-file /tmp/review_api.diff \
     --repo "$REPO_SLUG" \
-    --base-commit "$BASE_COMMIT"
+    --base-commit "$BASE_COMMIT" \
+    --head-commit-sha "$HEAD_COMMIT" \
+    --branch "$BRANCH"
 )
 
 REVIEW_ID=$(echo "$CREATE_RESPONSE" | jq -r '.review_id // empty')

@@ -70,6 +70,8 @@ inline curl loops. Paths below are relative to this skill directory:
 ```bash
 ITERATION=1
 BASE_COMMIT=$(git rev-parse "$BASE_BRANCH")
+HEAD_COMMIT=$(git rev-parse HEAD)
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
 REPO_SLUG=$(git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\\.git$//')
 DIFF_FILE="/tmp/carl_iteration${ITERATION}.diff"
 REVIEW_FILE="/tmp/carl_review_iter${ITERATION}.json"
@@ -80,7 +82,9 @@ CREATE_RESPONSE=$(
   ../propel-code-review/scripts/create_review.sh \
     --diff-file "$DIFF_FILE" \
     --repo "$REPO_SLUG" \
-    --base-commit "$BASE_COMMIT"
+    --base-commit "$BASE_COMMIT" \
+    --head-commit-sha "$HEAD_COMMIT" \
+    --branch "$BRANCH"
 )
 REVIEW_ID=$(echo "$CREATE_RESPONSE" | jq -r '.review_id // empty')
 
