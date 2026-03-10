@@ -49,6 +49,29 @@ poll_after_ms_to_seconds() {
   printf '%s\n' $(((poll_after_ms + 999) / 1000))
 }
 
+now_epoch_seconds() {
+  date +%s
+}
+
+remaining_budget_seconds() {
+  local remaining=$((DEADLINE_EPOCH_SECONDS - $(now_epoch_seconds)))
+  if [[ "$remaining" -lt 0 ]]; then
+    remaining=0
+  fi
+  printf '%s\n' "$remaining"
+}
+
+clamp_sleep_to_remaining_budget() {
+  local requested_sleep_seconds="$1"
+  local remaining_seconds
+  remaining_seconds="$(remaining_budget_seconds)"
+  if [[ "$requested_sleep_seconds" -gt "$remaining_seconds" ]]; then
+    printf '%s\n' "$remaining_seconds"
+    return
+  fi
+  printf '%s\n' "$requested_sleep_seconds"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --review-id)
@@ -110,7 +133,8 @@ if ! [[ "$SLEEP_SECONDS" =~ ^[0-9]+$ ]] || [[ "$SLEEP_SECONDS" -lt 1 ]]; then
 fi
 
 TOTAL_TIMEOUT_SECONDS=$((MAX_ATTEMPTS * SLEEP_SECONDS))
-MAX_POLLS_ALLOWED="$MAX_ATTEMPTS"
+START_EPOCH_SECONDS="$(now_epoch_seconds)"
+DEADLINE_EPOCH_SECONDS=$((START_EPOCH_SECONDS + TOTAL_TIMEOUT_SECONDS))
 
 BODY_FILE="$(mktemp)"
 CURL_CONFIG_FILE="$(mktemp)"
@@ -118,14 +142,17 @@ chmod 600 "$CURL_CONFIG_FILE"
 trap 'rm -f "$BODY_FILE" "$CURL_CONFIG_FILE"' EXIT
 printf 'header = "Authorization: Bearer %s"\n' "$PROPEL_API_KEY" >"$CURL_CONFIG_FILE"
 
-for ((i = 1; i <= MAX_POLLS_ALLOWED; i++)); do
+i=0
+while :; do
+  i=$((i + 1))
   if ! HTTP_CODE="$(
     curl -sS -o "$BODY_FILE" -w "%{http_code}" \
       --config "$CURL_CONFIG_FILE" \
       "$API_URL/v1/reviews/$REVIEW_ID"
   )"; then
-    if [[ "$i" -lt "$MAX_ATTEMPTS" ]]; then
-      sleep "$SLEEP_SECONDS"
+    RETRY_SLEEP_SECONDS="$(clamp_sleep_to_remaining_budget "$SLEEP_SECONDS")"
+    if [[ "$RETRY_SLEEP_SECONDS" -gt 0 ]]; then
+      sleep "$RETRY_SLEEP_SECONDS"
       continue
     fi
     echo "poll failed: transport-level request error after bounded retries" >&2
@@ -135,9 +162,12 @@ for ((i = 1; i <= MAX_POLLS_ALLOWED; i++)); do
     exit 1
   fi
 
-  if [[ "$HTTP_CODE" =~ ^5 ]] && [[ "$i" -lt "$MAX_ATTEMPTS" ]]; then
-    sleep "$SLEEP_SECONDS"
-    continue
+  if [[ "$HTTP_CODE" =~ ^5 ]]; then
+    RETRY_SLEEP_SECONDS="$(clamp_sleep_to_remaining_budget "$SLEEP_SECONDS")"
+    if [[ "$RETRY_SLEEP_SECONDS" -gt 0 ]]; then
+      sleep "$RETRY_SLEEP_SECONDS"
+      continue
+    fi
   fi
 
   if [[ ! "$HTTP_CODE" =~ ^2 ]]; then
@@ -156,11 +186,7 @@ for ((i = 1; i <= MAX_POLLS_ALLOWED; i++)); do
   if [[ "$POLL_AFTER_MS" =~ ^[0-9]+$ ]] && [[ "$POLL_AFTER_MS" -gt 0 ]]; then
     NEXT_SLEEP_SECONDS="$(poll_after_ms_to_seconds "$POLL_AFTER_MS")"
   fi
-  HINT_BASED_MAX_POLLS=$(((TOTAL_TIMEOUT_SECONDS + NEXT_SLEEP_SECONDS - 1) / NEXT_SLEEP_SECONDS))
-  if [[ "$HINT_BASED_MAX_POLLS" -lt 1 ]]; then
-    HINT_BASED_MAX_POLLS=1
-  fi
-  MAX_POLLS_ALLOWED="$HINT_BASED_MAX_POLLS"
+  NEXT_SLEEP_SECONDS="$(clamp_sleep_to_remaining_budget "$NEXT_SLEEP_SECONDS")"
   echo "$NOW poll=$i status=${REVIEW_STATUS:-unknown} next_poll_seconds=$NEXT_SLEEP_SECONDS" >&2
 
   if [[ "$REVIEW_STATUS" == "completed" || "$REVIEW_STATUS" == "failed" ]]; then
@@ -174,8 +200,11 @@ for ((i = 1; i <= MAX_POLLS_ALLOWED; i++)); do
     exit 0
   fi
 
+  if [[ "$NEXT_SLEEP_SECONDS" -le 0 ]]; then
+    break
+  fi
   sleep "$NEXT_SLEEP_SECONDS"
 done
 
-echo "timed out after $MAX_POLLS_ALLOWED polls (~${TOTAL_TIMEOUT_SECONDS} seconds)" >&2
+echo "timed out after $i polls (~${TOTAL_TIMEOUT_SECONDS} seconds)" >&2
 exit 1
