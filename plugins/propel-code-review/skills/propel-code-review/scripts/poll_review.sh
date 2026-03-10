@@ -49,12 +49,18 @@ poll_after_ms_to_seconds() {
   printf '%s\n' $(((poll_after_ms + 999) / 1000))
 }
 
-now_epoch_seconds() {
-  date +%s
+elapsed_runtime_seconds() {
+  if [[ -n "${PROPEL_REVIEW_POLL_ELAPSED_SECONDS_FILE:-}" ]] && [[ -f "${PROPEL_REVIEW_POLL_ELAPSED_SECONDS_FILE}" ]]; then
+    cat "${PROPEL_REVIEW_POLL_ELAPSED_SECONDS_FILE}"
+    return
+  fi
+  printf '%s\n' "$SECONDS"
 }
 
 remaining_budget_seconds() {
-  local remaining=$((DEADLINE_EPOCH_SECONDS - $(now_epoch_seconds)))
+  local elapsed_seconds
+  elapsed_seconds="$(elapsed_runtime_seconds)"
+  local remaining=$((TOTAL_TIMEOUT_SECONDS - elapsed_seconds))
   if [[ "$remaining" -lt 0 ]]; then
     remaining=0
   fi
@@ -133,8 +139,7 @@ if ! [[ "$SLEEP_SECONDS" =~ ^[0-9]+$ ]] || [[ "$SLEEP_SECONDS" -lt 1 ]]; then
 fi
 
 TOTAL_TIMEOUT_SECONDS=$((MAX_ATTEMPTS * SLEEP_SECONDS))
-START_EPOCH_SECONDS="$(now_epoch_seconds)"
-DEADLINE_EPOCH_SECONDS=$((START_EPOCH_SECONDS + TOTAL_TIMEOUT_SECONDS))
+SECONDS=0
 
 BODY_FILE="$(mktemp)"
 CURL_CONFIG_FILE="$(mktemp)"

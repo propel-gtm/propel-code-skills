@@ -183,6 +183,7 @@ def mock_tooling(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
     env["MOCK_CURL_URL_CAPTURE"] = str(url_capture)
     env["MOCK_SLEEP_CAPTURE"] = str(sleep_capture)
     env["MOCK_CLOCK_FILE"] = str(clock_file)
+    env["PROPEL_REVIEW_POLL_ELAPSED_SECONDS_FILE"] = str(clock_file)
 
     return {
         "env": env,
