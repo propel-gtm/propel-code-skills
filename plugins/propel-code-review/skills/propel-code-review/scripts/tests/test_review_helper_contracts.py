@@ -426,6 +426,43 @@ def test_poll_review_honors_poll_after_ms_hint(
     assert "next_poll_seconds=3" in result.stderr
 
 
+def test_poll_review_honors_immediate_repoll_hint(
+    mock_tooling: dict[str, Path | dict[str, str]]
+) -> None:
+    env = mock_tooling["env"]
+    sequence_file = mock_tooling["sequence_file"]
+    counter_file = mock_tooling["counter_file"]
+    sleep_capture = mock_tooling["sleep_capture"]
+    assert isinstance(env, dict)
+    assert isinstance(sequence_file, Path)
+    assert isinstance(counter_file, Path)
+    assert isinstance(sleep_capture, Path)
+
+    _write_sequence(
+        sequence_file,
+        [
+            (0, 200, '{"status":"running","poll_after_ms":0}'),
+            (0, 200, '{"status":"running","poll_after_ms":0}'),
+            (0, 200, '{"status":"completed","comments":[]}'),
+        ],
+    )
+
+    result = _run_script(
+        "poll_review.sh",
+        [
+            "--review-id",
+            "review-123",
+        ],
+        env,
+    )
+
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["status"] == "completed"
+    assert counter_file.read_text(encoding="utf-8") == "3"
+    assert not sleep_capture.exists() or sleep_capture.read_text(encoding="utf-8").strip() == ""
+    assert "next_poll_seconds=0" in result.stderr
+
+
 def test_poll_review_clamps_request_timeout_to_remaining_budget(
     mock_tooling: dict[str, Path | dict[str, str]]
 ) -> None:

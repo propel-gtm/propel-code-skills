@@ -203,9 +203,13 @@ while :; do
   REVIEW_STATUS="$(printf '%s' "$SANITIZED_RESPONSE" | jq -r '.status // empty' 2>/dev/null || echo '')"
   NOW="$(date +%H:%M:%S)"
   NEXT_SLEEP_SECONDS="$SLEEP_SECONDS"
+  IMMEDIATE_REPOLL_REQUESTED=0
   POLL_AFTER_MS="$(printf '%s' "$SANITIZED_RESPONSE" | jq -r '.poll_after_ms // empty' 2>/dev/null || echo '')"
-  if [[ "$POLL_AFTER_MS" =~ ^[0-9]+$ ]] && [[ "$POLL_AFTER_MS" -gt 0 ]]; then
+  if [[ "$POLL_AFTER_MS" =~ ^[0-9]+$ ]]; then
     NEXT_SLEEP_SECONDS="$(poll_after_ms_to_seconds "$POLL_AFTER_MS")"
+    if [[ "$POLL_AFTER_MS" -eq 0 ]]; then
+      IMMEDIATE_REPOLL_REQUESTED=1
+    fi
   fi
   NEXT_SLEEP_SECONDS="$(clamp_sleep_to_remaining_budget "$NEXT_SLEEP_SECONDS")"
   echo "$NOW poll=$i status=${REVIEW_STATUS:-unknown} next_poll_seconds=$NEXT_SLEEP_SECONDS" >&2
@@ -230,6 +234,10 @@ while :; do
       break
     fi
     FINAL_REFRESH_ATTEMPTED=1
+    continue
+  fi
+
+  if [[ "$IMMEDIATE_REPOLL_REQUESTED" -eq 1 ]]; then
     continue
   fi
 
