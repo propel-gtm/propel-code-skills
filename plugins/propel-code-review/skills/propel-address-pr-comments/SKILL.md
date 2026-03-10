@@ -15,6 +15,8 @@ Paths below are relative to this skill directory:
 
 - `scripts/fetch_comments.py` fetches PR conversation comments, reviews, and
   inline review threads via `gh api graphql`.
+- Use the fetch script, not `gh pr view --json`, for inline review discovery.
+  `gh pr view` does not expose `reviewThreads`.
 
 ## Approval-Friendly Prefixes (One-Time)
 
@@ -22,6 +24,7 @@ If your client supports prefix-based trust/approval, approve these once before
 running this skill:
 
 - `scripts/fetch_comments.py`
+- `python3 scripts/fetch_comments.py`
 - `python scripts/fetch_comments.py`
 - `gh auth status`
 - `gh pr view`
@@ -68,7 +71,9 @@ Prerequisites:
 - **PROPEL_API_KEY**: check that the `PROPEL_API_KEY` environment variable is set (for example, run `if [ -n "$PROPEL_API_KEY" ]; then echo "PROPEL_API_KEY is set"; else echo "PROPEL_API_KEY is not set"; fi`). If it is not set, tell the user to open https://app.propelcode.ai/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write, generate a token (scopes are pre-filled), and paste it back. Then export it for the session: `export PROPEL_API_KEY="<token>"`.
 
 ## 1) Inspect comments needing attention
-- Run scripts/fetch_comments.py which will print out all the comments and review threads on the PR
+- Run `scripts/fetch_comments.py` directly or `python3 scripts/fetch_comments.py`.
+- Do not use `gh pr view --json` to fetch inline comments; it does not expose `reviewThreads`.
+- The fetch script prints all conversation comments, reviews, and inline review threads for the PR.
 
 ## 2) Build candidate findings set
 - Filter to eligible comments based on scope rules above.
