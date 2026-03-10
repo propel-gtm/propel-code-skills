@@ -102,6 +102,9 @@ exit "$EXIT_CODE"
 """
 
 MOCK_SLEEP = """#!/usr/bin/env bash
+if [[ -n "${MOCK_SLEEP_CAPTURE:-}" ]]; then
+  printf '%s\\n' "$*" >> "$MOCK_SLEEP_CAPTURE"
+fi
 exit 0
 """
 
@@ -124,6 +127,7 @@ def mock_tooling(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
     stdin_capture = tmp_path / "curl_stdin_capture.txt"
     data_capture = tmp_path / "curl_data_capture.txt"
     url_capture = tmp_path / "curl_url_capture.txt"
+    sleep_capture = tmp_path / "sleep_capture.txt"
 
     env = os.environ.copy()
     env["PATH"] = f"{mock_bin}:{env.get('PATH', '')}"
@@ -133,6 +137,7 @@ def mock_tooling(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
     env["MOCK_CURL_STDIN_CAPTURE"] = str(stdin_capture)
     env["MOCK_CURL_DATA_CAPTURE"] = str(data_capture)
     env["MOCK_CURL_URL_CAPTURE"] = str(url_capture)
+    env["MOCK_SLEEP_CAPTURE"] = str(sleep_capture)
 
     return {
         "env": env,
@@ -141,6 +146,7 @@ def mock_tooling(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
         "stdin_capture": stdin_capture,
         "data_capture": data_capture,
         "url_capture": url_capture,
+        "sleep_capture": sleep_capture,
     }
 
 
@@ -323,6 +329,42 @@ def test_poll_review_failed_status_returns_exit_code_2(
 
     assert result.returncode == 2
     assert json.loads(result.stdout)["status"] == "failed"
+
+
+def test_poll_review_honors_poll_after_ms_hint(
+    mock_tooling: dict[str, Path | dict[str, str]]
+) -> None:
+    env = mock_tooling["env"]
+    sequence_file = mock_tooling["sequence_file"]
+    counter_file = mock_tooling["counter_file"]
+    sleep_capture = mock_tooling["sleep_capture"]
+    assert isinstance(env, dict)
+    assert isinstance(sequence_file, Path)
+    assert isinstance(counter_file, Path)
+    assert isinstance(sleep_capture, Path)
+
+    _write_sequence(
+        sequence_file,
+        [
+            (0, 200, '{"status":"running","poll_after_ms":3000}'),
+            (0, 200, '{"status":"completed","comments":[]}'),
+        ],
+    )
+
+    result = _run_script(
+        "poll_review.sh",
+        [
+            "--review-id",
+            "review-123",
+        ],
+        env,
+    )
+
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["status"] == "completed"
+    assert counter_file.read_text(encoding="utf-8") == "2"
+    assert sleep_capture.read_text(encoding="utf-8").strip() == "3"
+    assert "next_poll_seconds=3" in result.stderr
 
 
 def test_poll_review_default_budget_is_fifteen_minutes(

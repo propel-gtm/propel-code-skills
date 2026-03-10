@@ -11,8 +11,8 @@ Required:
 
 Options:
   --output-file    Write final review JSON to this file
-  --max-attempts   Number of polling attempts (default: ${DEFAULT_MAX_ATTEMPTS})
-  --sleep-seconds  Delay between polls in seconds (default: ${DEFAULT_SLEEP_SECONDS})
+  --max-attempts   Baseline polling attempts used to derive the timeout budget (default: ${DEFAULT_MAX_ATTEMPTS})
+  --sleep-seconds  Fallback delay between polls in seconds when the API omits poll_after_ms (default: ${DEFAULT_SLEEP_SECONDS})
   --api-url        Override API base URL (default: https://api.propelcode.ai)
   -h, --help       Show this help
 
@@ -42,6 +42,11 @@ require_option_value() {
     exit 2
   fi
   printf '%s\n' "$value"
+}
+
+poll_after_ms_to_seconds() {
+  local poll_after_ms="$1"
+  printf '%s\n' $(((poll_after_ms + 999) / 1000))
 }
 
 while [[ $# -gt 0 ]]; do
@@ -104,13 +109,16 @@ if ! [[ "$SLEEP_SECONDS" =~ ^[0-9]+$ ]] || [[ "$SLEEP_SECONDS" -lt 1 ]]; then
   exit 2
 fi
 
+TOTAL_TIMEOUT_SECONDS=$((MAX_ATTEMPTS * SLEEP_SECONDS))
+MAX_POLLS_ALLOWED="$MAX_ATTEMPTS"
+
 BODY_FILE="$(mktemp)"
 CURL_CONFIG_FILE="$(mktemp)"
 chmod 600 "$CURL_CONFIG_FILE"
 trap 'rm -f "$BODY_FILE" "$CURL_CONFIG_FILE"' EXIT
 printf 'header = "Authorization: Bearer %s"\n' "$PROPEL_API_KEY" >"$CURL_CONFIG_FILE"
 
-for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
+for ((i = 1; i <= MAX_POLLS_ALLOWED; i++)); do
   if ! HTTP_CODE="$(
     curl -sS -o "$BODY_FILE" -w "%{http_code}" \
       --config "$CURL_CONFIG_FILE" \
@@ -143,7 +151,17 @@ for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
   # If jq parsing fails, keep polling rather than crashing on transient non-JSON responses.
   REVIEW_STATUS="$(printf '%s' "$SANITIZED_RESPONSE" | jq -r '.status // empty' 2>/dev/null || echo '')"
   NOW="$(date +%H:%M:%S)"
-  echo "$NOW poll=$i status=${REVIEW_STATUS:-unknown}" >&2
+  NEXT_SLEEP_SECONDS="$SLEEP_SECONDS"
+  POLL_AFTER_MS="$(printf '%s' "$SANITIZED_RESPONSE" | jq -r '.poll_after_ms // empty' 2>/dev/null || echo '')"
+  if [[ "$POLL_AFTER_MS" =~ ^[0-9]+$ ]] && [[ "$POLL_AFTER_MS" -gt 0 ]]; then
+    NEXT_SLEEP_SECONDS="$(poll_after_ms_to_seconds "$POLL_AFTER_MS")"
+  fi
+  HINT_BASED_MAX_POLLS=$(((TOTAL_TIMEOUT_SECONDS + NEXT_SLEEP_SECONDS - 1) / NEXT_SLEEP_SECONDS))
+  if [[ "$HINT_BASED_MAX_POLLS" -lt 1 ]]; then
+    HINT_BASED_MAX_POLLS=1
+  fi
+  MAX_POLLS_ALLOWED="$HINT_BASED_MAX_POLLS"
+  echo "$NOW poll=$i status=${REVIEW_STATUS:-unknown} next_poll_seconds=$NEXT_SLEEP_SECONDS" >&2
 
   if [[ "$REVIEW_STATUS" == "completed" || "$REVIEW_STATUS" == "failed" ]]; then
     if [[ -n "$OUTPUT_FILE" ]]; then
@@ -156,8 +174,8 @@ for ((i = 1; i <= MAX_ATTEMPTS; i++)); do
     exit 0
   fi
 
-  sleep "$SLEEP_SECONDS"
+  sleep "$NEXT_SLEEP_SECONDS"
 done
 
-echo "timed out after $MAX_ATTEMPTS polls (~$((MAX_ATTEMPTS * SLEEP_SECONDS)) seconds)" >&2
+echo "timed out after $MAX_POLLS_ALLOWED polls (~${TOTAL_TIMEOUT_SECONDS} seconds)" >&2
 exit 1
