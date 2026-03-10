@@ -173,6 +173,9 @@ while :; do
       sleep "$RETRY_SLEEP_SECONDS"
       continue
     fi
+    if [[ "$(remaining_budget_seconds)" -le 0 ]]; then
+      break
+    fi
     echo "poll failed: transport-level request error after bounded retries" >&2
     if [[ -s "$BODY_FILE" ]]; then
       cat "$BODY_FILE" >&2

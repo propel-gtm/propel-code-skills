@@ -543,6 +543,47 @@ def test_poll_review_counts_request_latency_toward_timeout_budget(
     assert clock_file.read_text(encoding="utf-8") == "6"
 
 
+def test_poll_review_treats_budget_exhaustion_during_curl_timeout_as_normal_timeout(
+    mock_tooling: dict[str, Path | dict[str, str]]
+) -> None:
+    env = mock_tooling["env"]
+    sequence_file = mock_tooling["sequence_file"]
+    counter_file = mock_tooling["counter_file"]
+    clock_file = mock_tooling["clock_file"]
+    assert isinstance(env, dict)
+    assert isinstance(sequence_file, Path)
+    assert isinstance(counter_file, Path)
+    assert isinstance(clock_file, Path)
+
+    env["MOCK_CURL_LATENCY_SECONDS"] = "1"
+    _write_sequence(
+        sequence_file,
+        [
+            (0, 200, '{"status":"running","poll_after_ms":1000}'),
+            (28, 0, ""),
+        ],
+    )
+
+    result = _run_script(
+        "poll_review.sh",
+        [
+            "--review-id",
+            "review-123",
+            "--max-attempts",
+            "1",
+            "--sleep-seconds",
+            "2",
+        ],
+        env,
+    )
+
+    assert result.returncode == 1
+    assert "timed out after 2 polls (~2 seconds)" in result.stderr
+    assert "transport-level request error" not in result.stderr
+    assert counter_file.read_text(encoding="utf-8") == "2"
+    assert clock_file.read_text(encoding="utf-8") == "2"
+
+
 def test_poll_review_default_budget_is_fifteen_minutes(
     mock_tooling: dict[str, Path | dict[str, str]]
 ) -> None:
