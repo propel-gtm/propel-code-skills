@@ -33,6 +33,12 @@ while [[ $# -gt 0 ]]; do
       DATA_ARG="${2-}"
       shift 2
       ;;
+    --connect-timeout|--max-time)
+      if [[ "$1" == "--max-time" && -n "${MOCK_CURL_MAX_TIME_CAPTURE:-}" ]]; then
+        printf '%s\\n' "${2-}" >> "$MOCK_CURL_MAX_TIME_CAPTURE"
+      fi
+      shift 2
+      ;;
     --config|-X)
       shift 2
       ;;
@@ -171,6 +177,7 @@ def mock_tooling(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
     url_capture = tmp_path / "curl_url_capture.txt"
     sleep_capture = tmp_path / "sleep_capture.txt"
     clock_file = tmp_path / "clock.txt"
+    max_time_capture = tmp_path / "curl_max_time_capture.txt"
     clock_file.write_text("0", encoding="utf-8")
 
     env = os.environ.copy()
@@ -184,6 +191,7 @@ def mock_tooling(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
     env["MOCK_SLEEP_CAPTURE"] = str(sleep_capture)
     env["MOCK_CLOCK_FILE"] = str(clock_file)
     env["PROPEL_REVIEW_POLL_ELAPSED_SECONDS_FILE"] = str(clock_file)
+    env["MOCK_CURL_MAX_TIME_CAPTURE"] = str(max_time_capture)
 
     return {
         "env": env,
@@ -194,6 +202,7 @@ def mock_tooling(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
         "url_capture": url_capture,
         "sleep_capture": sleep_capture,
         "clock_file": clock_file,
+        "max_time_capture": max_time_capture,
     }
 
 
@@ -417,6 +426,42 @@ def test_poll_review_honors_poll_after_ms_hint(
     assert "next_poll_seconds=3" in result.stderr
 
 
+def test_poll_review_clamps_request_timeout_to_remaining_budget(
+    mock_tooling: dict[str, Path | dict[str, str]]
+) -> None:
+    env = mock_tooling["env"]
+    sequence_file = mock_tooling["sequence_file"]
+    max_time_capture = mock_tooling["max_time_capture"]
+    assert isinstance(env, dict)
+    assert isinstance(sequence_file, Path)
+    assert isinstance(max_time_capture, Path)
+
+    _write_sequence(
+        sequence_file,
+        [
+            (0, 200, '{"status":"running"}'),
+            (0, 200, '{"status":"completed","comments":[]}'),
+        ],
+    )
+
+    result = _run_script(
+        "poll_review.sh",
+        [
+            "--review-id",
+            "review-123",
+            "--max-attempts",
+            "1",
+            "--sleep-seconds",
+            "12",
+        ],
+        env,
+    )
+
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["status"] == "completed"
+    assert max_time_capture.read_text(encoding="utf-8").splitlines() == ["12", "1"]
+
+
 def test_poll_review_clamps_poll_hint_to_remaining_budget(
     mock_tooling: dict[str, Path | dict[str, str]]
 ) -> None:
@@ -453,10 +498,10 @@ def test_poll_review_clamps_poll_hint_to_remaining_budget(
     )
 
     assert result.returncode == 1
-    assert "timed out after 2 polls (~10 seconds)" in result.stderr
-    assert counter_file.read_text(encoding="utf-8") == "2"
-    assert sleep_capture.read_text(encoding="utf-8").strip() == "10"
-    assert clock_file.read_text(encoding="utf-8") == "10"
+    assert "timed out after 3 polls (~10 seconds)" in result.stderr
+    assert counter_file.read_text(encoding="utf-8") == "3"
+    assert sleep_capture.read_text(encoding="utf-8").strip() == "9"
+    assert clock_file.read_text(encoding="utf-8") == "9"
 
 
 def test_poll_review_counts_request_latency_toward_timeout_budget(
@@ -495,7 +540,7 @@ def test_poll_review_counts_request_latency_toward_timeout_budget(
     assert result.returncode == 1
     assert "timed out after 4 polls (~6 seconds)" in result.stderr
     assert counter_file.read_text(encoding="utf-8") == "4"
-    assert clock_file.read_text(encoding="utf-8") == "7"
+    assert clock_file.read_text(encoding="utf-8") == "6"
 
 
 def test_poll_review_default_budget_is_fifteen_minutes(
@@ -523,8 +568,8 @@ def test_poll_review_default_budget_is_fifteen_minutes(
     )
 
     assert result.returncode == 1
-    assert "timed out after 31 polls (~900 seconds)" in result.stderr
-    assert counter_file.read_text(encoding="utf-8") == "31"
+    assert "timed out after 32 polls (~900 seconds)" in result.stderr
+    assert counter_file.read_text(encoding="utf-8") == "32"
 
 
 def test_post_comment_feedback_contract(

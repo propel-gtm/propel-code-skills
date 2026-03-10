@@ -26,6 +26,7 @@ EOF
 DEFAULT_POLL_TIMEOUT_SECONDS=900
 DEFAULT_SLEEP_SECONDS=30
 DEFAULT_MAX_ATTEMPTS=$((DEFAULT_POLL_TIMEOUT_SECONDS / DEFAULT_SLEEP_SECONDS))
+FINAL_STATUS_REFRESH_WINDOW_SECONDS=1
 
 REVIEW_ID=""
 OUTPUT_FILE=""
@@ -71,6 +72,11 @@ clamp_sleep_to_remaining_budget() {
   local requested_sleep_seconds="$1"
   local remaining_seconds
   remaining_seconds="$(remaining_budget_seconds)"
+  if [[ "$remaining_seconds" -gt "$FINAL_STATUS_REFRESH_WINDOW_SECONDS" ]]; then
+    remaining_seconds=$((remaining_seconds - FINAL_STATUS_REFRESH_WINDOW_SECONDS))
+  else
+    remaining_seconds=0
+  fi
   if [[ "$requested_sleep_seconds" -gt "$remaining_seconds" ]]; then
     printf '%s\n' "$remaining_seconds"
     return
@@ -148,10 +154,17 @@ trap 'rm -f "$BODY_FILE" "$CURL_CONFIG_FILE"' EXIT
 printf 'header = "Authorization: Bearer %s"\n' "$PROPEL_API_KEY" >"$CURL_CONFIG_FILE"
 
 i=0
+FINAL_REFRESH_ATTEMPTED=0
 while :; do
   i=$((i + 1))
+  REQUEST_TIMEOUT_SECONDS="$(remaining_budget_seconds)"
+  if [[ "$REQUEST_TIMEOUT_SECONDS" -le 0 ]]; then
+    break
+  fi
   if ! HTTP_CODE="$(
     curl -sS -o "$BODY_FILE" -w "%{http_code}" \
+      --connect-timeout "$REQUEST_TIMEOUT_SECONDS" \
+      --max-time "$REQUEST_TIMEOUT_SECONDS" \
       --config "$CURL_CONFIG_FILE" \
       "$API_URL/v1/reviews/$REVIEW_ID"
   )"; then
@@ -205,8 +218,24 @@ while :; do
     exit 0
   fi
 
-  if [[ "$NEXT_SLEEP_SECONDS" -le 0 ]]; then
+  REMAINING_AFTER_FETCH_SECONDS="$(remaining_budget_seconds)"
+  if [[ "$REMAINING_AFTER_FETCH_SECONDS" -le 0 ]]; then
     break
+  fi
+  if [[ "$REMAINING_AFTER_FETCH_SECONDS" -le "$FINAL_STATUS_REFRESH_WINDOW_SECONDS" ]]; then
+    if [[ "$FINAL_REFRESH_ATTEMPTED" -eq 1 ]]; then
+      break
+    fi
+    FINAL_REFRESH_ATTEMPTED=1
+    continue
+  fi
+
+  if [[ "$NEXT_SLEEP_SECONDS" -le 0 ]]; then
+    if [[ "$FINAL_REFRESH_ATTEMPTED" -eq 1 ]]; then
+      break
+    fi
+    FINAL_REFRESH_ATTEMPTED=1
+    continue
   fi
   sleep "$NEXT_SLEEP_SECONDS"
 done
