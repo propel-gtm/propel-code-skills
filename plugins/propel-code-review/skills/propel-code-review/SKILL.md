@@ -146,6 +146,7 @@ Response (200):
 {
   "review_id": "uuid",
   "status": "queued|running|completed|failed",
+  "poll_after_ms": 3000,
   "comments": [
     {
       "comment_id": "string",
@@ -231,8 +232,9 @@ running this skill:
    - `404`: repository is not connected to the Propel workspace (or slug is wrong). Stop and ask user to connect/fix repo slug.
    - `400/413`: invalid request or diff too large. Stop and show actionable fix.
    - `5xx`: transient API error. Retry with bounded backoff, then stop and report if still failing.
-8. Poll with `scripts/poll_review.sh` every 30 seconds for up to 15 minutes until status is
-   `completed` or `failed`.
+8. Poll with `scripts/poll_review.sh` until status is `completed` or `failed`.
+   The script keeps the existing 15 minute timeout budget, and honors
+   `poll_after_ms` from the API when present.
 9. Present comments to the user with file/line context.
 10. For each comment, determine whether it is valid and applicable to the code.
 11. If valid, incorporate the change in the codebase. If invalid, do not change
@@ -271,6 +273,9 @@ scripts/poll_review.sh \
   --max-attempts 30 \
   --sleep-seconds 30 \
   --output-file /tmp/review_api.result.json
+
+# The poller uses the 30x30s budget above, but will follow API-provided
+# poll_after_ms hints when the server returns them.
 
 cat /tmp/review_api.result.json
 
