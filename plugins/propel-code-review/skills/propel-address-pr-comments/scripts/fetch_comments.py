@@ -11,6 +11,12 @@ Requires:
 
 Usage:
   ./fetch_comments.py > pr_comments.json
+  python3 fetch_comments.py > pr_comments.json
+
+Note:
+  `gh pr view --json` is used only to resolve the current PR number/URL.
+  Inline review threads are fetched via GraphQL because `gh pr view` does not
+  expose `reviewThreads`.
 """
 
 from __future__ import annotations
