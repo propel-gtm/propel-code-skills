@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 RE_FRONTMATTER = re.compile(r"^---\n(.*?)\n---(?:\n|$)", re.DOTALL)
-RE_FRONTMATTER_LINE = re.compile(r"^([A-Za-z0-9_-]+)\s*:\s*(.+)$")
+RE_FRONTMATTER_LINE = re.compile(r"^([A-Za-z0-9_-]+)\s*:\s*(.*)$")
 
 
 def main() -> int:
@@ -46,7 +46,7 @@ def main() -> int:
                 continue
 
             key, value = line_match.groups()
-            parsed[key] = value
+            parsed[key] = value.strip()
 
         for required in ("name", "description"):
             if not parsed.get(required):
