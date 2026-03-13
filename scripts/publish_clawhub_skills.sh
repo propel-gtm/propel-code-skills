@@ -127,7 +127,10 @@ if [[ "$PRINT_ONLY" -eq 0 ]]; then
     echo "clawhub CLI not found. Install it with: npm install -g clawhub" >&2
     exit 1
   fi
-  clawhub whoami >/dev/null
+  if ! clawhub whoami >/dev/null 2>&1; then
+    echo "clawhub auth check failed. Run 'clawhub login' first." >&2
+    exit 1
+  fi
 fi
 
 for skill in "${SKILLS[@]}"; do
