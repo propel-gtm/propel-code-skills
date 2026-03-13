@@ -28,7 +28,6 @@ running this skill:
 - `gh auth status`
 - `gh pr view`
 - `gh api graphql`
-- `jq`
 
 ## 0) Execution order (fetch first, then ask mode)
 
