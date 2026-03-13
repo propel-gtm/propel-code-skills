@@ -1,8 +1,7 @@
 ---
 name: propel-address-pr-comments
-description: Help address Propel Code AI review/issue comments on the open GitHub PR for the current branch using gh CLI, with mode-based execution and agent triage defaults.
-metadata:
-  short-description: Address Propel AI comments in a GitHub PR review
+description: Find the open GitHub PR for the current branch, fetch Propel-authored review threads with gh GraphQL, present an actionable inventory, and apply the selected fixes. Use when triaging Propel comments that already exist on a GitHub PR.
+metadata: {"clawdbot":{"requires":{"bins":["gh","python3"]},"homepage":"https://www.propelcode.ai/"}}
 ---
 
 # PR Comment Handler
@@ -67,8 +66,8 @@ When no structured severity is present in fetched GitHub comments:
   - `info`: style, naming, docs, non-blocking suggestions
 
 Prerequisites:
-- **gh CLI**: ensure `gh` is authenticated (for example, run `gh auth login` once), then run `gh auth status` with escalated permissions (include workflow/repo scopes) so `gh` commands succeed. If sandboxing blocks `gh auth status`, rerun it with `sandbox_permissions=require_escalated`.
-- **PROPEL_API_KEY**: check that the `PROPEL_API_KEY` environment variable is set (for example, run `if [ -n "$PROPEL_API_KEY" ]; then echo "PROPEL_API_KEY is set"; else echo "PROPEL_API_KEY is not set"; fi`). If it is not set, tell the user to open https://app.propelcode.ai/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write, generate a token (scopes are pre-filled), and paste it back. Then export it for the session: `export PROPEL_API_KEY="<token>"`.
+- **gh CLI**: ensure `gh` is authenticated (for example, run `gh auth login` once), then run `gh auth status` so GitHub commands succeed.
+- **PROPEL_API_KEY**: not required for fetching or triaging GitHub PR comments in this skill. Only generate one if you also plan to run the related `propel-code-review` or `carl` skills in the same session.
 
 ## 1) Inspect comments needing attention
 - Run `scripts/fetch_comments.py` directly or `python3 scripts/fetch_comments.py`.

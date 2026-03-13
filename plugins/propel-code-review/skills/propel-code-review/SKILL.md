@@ -1,6 +1,7 @@
 ---
 name: propel-code-review
-description: Run async diff-based code reviews using the Propel Review API and retrieve comments and feedback.
+description: Run async diff-based code reviews using the Propel Review API, poll for completion, retrieve structured findings, and send comment feedback. Use when reviewing the current branch diff or any Git diff with Propel.
+metadata: {"clawdbot":{"requires":{"env":["PROPEL_API_KEY"],"bins":["curl","git","jq"]},"primaryEnv":"PROPEL_API_KEY","homepage":"https://www.propelcode.ai/"}}
 ---
 
 # Propel Review API Skill
