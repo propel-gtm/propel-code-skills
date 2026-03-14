@@ -15,6 +15,9 @@ Paths below are relative to this skill directory:
 
 - `scripts/fetch_comments.py` fetches PR conversation comments, reviews, and
   inline review threads via `gh api graphql`.
+- The fetch script also emits an `addressable` subset that already excludes:
+  - resolved inline review threads
+  - Propel-authored summary-like comments/reviews
 - Use the fetch script, not `gh pr view --json`, for inline review discovery.
   `gh pr view` does not expose `reviewThreads`.
 
@@ -34,7 +37,7 @@ running this skill:
 ## 0) Execution order (fetch first, then ask mode)
 
 Execution order:
-1. Fetch and filter Propel-authored comments first.
+1. Fetch comments first, then use the script's `addressable` subset.
 2. Present the standardized comment inventory so the user can see all comments.
 3. Then ask the mode question (unless the user already explicitly chose mode).
 4. Do not silently default to a mode when user intent is missing.
@@ -49,6 +52,8 @@ Supported modes:
 Eligibility scope:
 - Process only comments/review threads authored by Propel Code AI.
 - Ignore all non-Propel comments.
+- Skip all resolved review threads.
+- Skip Propel-authored comments/reviews that look like summary comments (for example summary headers, overall PR summaries, LGTM-only approvals).
 
 Internal triage policy (used only for `AGENT_DECIDES`):
 - Do not ask the user to choose severity by default.
@@ -71,12 +76,13 @@ Prerequisites:
 - **PROPEL_API_KEY**: check that the `PROPEL_API_KEY` environment variable is set (for example, run `if [ -n "$PROPEL_API_KEY" ]; then echo "PROPEL_API_KEY is set"; else echo "PROPEL_API_KEY is not set"; fi`). If it is not set, tell the user to open https://app.propelcode.ai/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write, generate a token (scopes are pre-filled), and paste it back. Then export it for the session: `export PROPEL_API_KEY="<token>"`.
 
 ## 1) Inspect comments needing attention
-- Run `scripts/fetch_comments.py` directly or `python3 scripts/fetch_comments.py`.
+- Run `scripts/fetch_comments.py --addressable-only` (or `python3 scripts/fetch_comments.py --addressable-only`).
 - Do not use `gh pr view --json` to fetch inline comments; it does not expose `reviewThreads`.
-- The fetch script prints all conversation comments, reviews, and inline review threads for the PR.
+- If running without `--addressable-only`, read from `addressable` in the JSON payload and ignore the raw top-level arrays.
 
 ## 2) Build candidate findings set
-- Filter to eligible comments based on scope rules above.
+- Build the candidate set from the `addressable` payload only.
+- Do not re-add any item listed in `addressable.excluded`.
 - Always present the comment inventory in this standardized format, regardless of PR size:
   - First line: `I found <N> Propel comments.`
   - Then list every eligible comment as a numbered bullet.
