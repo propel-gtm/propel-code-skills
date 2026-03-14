@@ -76,9 +76,9 @@ Prerequisites:
 - **PROPEL_API_KEY**: check that the `PROPEL_API_KEY` environment variable is set (for example, run `if [ -n "$PROPEL_API_KEY" ]; then echo "PROPEL_API_KEY is set"; else echo "PROPEL_API_KEY is not set"; fi`). If it is not set, tell the user to open https://app.propelcode.ai/administration/settings?tab=review-api-tokens&token_name=Claude+Code&scopes=reviews:read,reviews:write, generate a token (scopes are pre-filled), and paste it back. Then export it for the session: `export PROPEL_API_KEY="<token>"`.
 
 ## 1) Inspect comments needing attention
-- Run `scripts/fetch_comments.py --addressable-only` (or `python3 scripts/fetch_comments.py --addressable-only`).
+- Run `scripts/fetch_comments.py` (or `python3 scripts/fetch_comments.py`). This defaults to addressable-only output.
 - Do not use `gh pr view --json` to fetch inline comments; it does not expose `reviewThreads`.
-- If running without `--addressable-only`, read from `addressable` in the JSON payload and ignore the raw top-level arrays.
+- Use `--all-comments` only when you explicitly need the full raw payload.
 
 ## 2) Build candidate findings set
 - Build the candidate set from the `addressable` payload only.

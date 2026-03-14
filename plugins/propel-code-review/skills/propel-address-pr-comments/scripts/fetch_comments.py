@@ -10,9 +10,9 @@ Requires:
   - current branch has an associated (open) PR
 
 Usage:
-  ./fetch_comments.py > pr_comments.json
-  python3 fetch_comments.py > pr_comments.json
-  python3 fetch_comments.py --addressable-only > pr_comments_addressable.json
+  ./fetch_comments.py > pr_comments_addressable.json
+  python3 fetch_comments.py > pr_comments_addressable.json
+  python3 fetch_comments.py --all-comments > pr_comments_full.json
 
 Note:
   `gh pr view --json` is used only to resolve the current PR number/URL.
@@ -133,10 +133,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "that excludes resolved threads and Propel summary-like comments."
         )
     )
-    parser.add_argument(
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
         "--addressable-only",
+        dest="addressable_only",
         action="store_true",
-        help="Print only the filtered addressable payload.",
+        default=True,
+        help="Print only the filtered addressable payload (default).",
+    )
+    mode_group.add_argument(
+        "--all-comments",
+        dest="addressable_only",
+        action="store_false",
+        help="Print the full payload (raw comments/reviews/threads plus addressable subset).",
     )
     return parser.parse_args(argv)
 
