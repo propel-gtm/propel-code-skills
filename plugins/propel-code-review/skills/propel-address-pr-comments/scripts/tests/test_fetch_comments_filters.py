@@ -16,8 +16,11 @@ from fetch_comments import (  # noqa: E402
 
 
 def test_is_propel_author_heuristic():
+    assert is_propel_author("propel-code-bot")
     assert is_propel_author("propel-ai")
     assert is_propel_author("PropelCodeBot")
+    assert not is_propel_author("propelled_dev")
+    assert not is_propel_author("im-propeller")
     assert not is_propel_author("octocat")
     assert not is_propel_author("")
     assert not is_propel_author(None)

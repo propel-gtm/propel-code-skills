@@ -35,6 +35,12 @@ from command_helpers import CommandError, run_cmd, run_json
 
 COMMAND_TIMEOUT_SECONDS = 120
 PROPEL_AUTHOR_TOKEN = "propel"
+KNOWN_PROPEL_AUTHOR_LOGINS = {
+    "propel",
+    "propel-ai",
+    "propel-code-bot",
+    "propelcodebot",
+}
 SUMMARY_HEADING_RE = re.compile(r"^\s*(?:#{1,6}\s*)?(?:overall\s+)?summary\b")
 SUMMARY_SIGNALS = (
     "<!-- carl-local-loop -->",
@@ -164,7 +170,9 @@ def is_propel_author(login: str | None) -> bool:
     normalized = login.strip().lower()
     if normalized == "":
         return False
-    return PROPEL_AUTHOR_TOKEN in normalized
+    if normalized in KNOWN_PROPEL_AUTHOR_LOGINS:
+        return True
+    return normalized.startswith(f"{PROPEL_AUTHOR_TOKEN}-") or normalized.startswith(f"{PROPEL_AUTHOR_TOKEN}_")
 
 
 def _first_non_empty_line(text: str) -> str:
