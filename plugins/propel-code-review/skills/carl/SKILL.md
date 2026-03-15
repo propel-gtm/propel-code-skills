@@ -1,6 +1,7 @@
 ---
 name: carl
-description: Continuously run Propel code review, fix valid comments, and re-review until there are no remaining comments.
+description: Continuously run Propel code review, fix valid findings, rerun review, and publish a final PR summary when the loop reaches a terminal state. Use when the goal is to clear Propel findings on the current branch.
+metadata: {"clawdbot":{"requires":{"env":["PROPEL_API_KEY"],"bins":["curl","git","gh","jq","python3"]},"primaryEnv":"PROPEL_API_KEY","homepage":"https://www.propelcode.ai/"}}
 ---
 
 # CARL (Coding Agent Review Loop)

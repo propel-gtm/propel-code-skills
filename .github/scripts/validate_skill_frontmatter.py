@@ -3,13 +3,14 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
 
 
 RE_FRONTMATTER = re.compile(r"^---\n(.*?)\n---(?:\n|$)", re.DOTALL)
-RE_KEY = re.compile(r"^([A-Za-z0-9_-]+)\s*:", re.MULTILINE)
+RE_FRONTMATTER_LINE = re.compile(r"^([A-Za-z0-9_-]+)\s*:\s*(.*)$")
 
 
 def main() -> int:
@@ -30,11 +31,58 @@ def main() -> int:
             continue
 
         frontmatter = match.group(1)
-        keys = set(RE_KEY.findall(frontmatter))
+        parsed: dict[str, str] = {}
+        for raw_line in frontmatter.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            line_match = RE_FRONTMATTER_LINE.match(line)
+            if line_match is None:
+                errors.append(
+                    f"{rel_path}: frontmatter must use single-line `key: value` entries "
+                    "to match this repository's validation convention"
+                )
+                continue
+
+            key, value = line_match.groups()
+            parsed[key] = value.strip()
 
         for required in ("name", "description"):
-            if required not in keys:
+            if not parsed.get(required):
                 errors.append(f"{rel_path}: missing `{required}` in frontmatter")
+
+        if "metadata" in parsed:
+            metadata = parsed["metadata"]
+            if not metadata:
+                errors.append(f"{rel_path}: `metadata` must not be blank")
+            else:
+                try:
+                    metadata_value = json.loads(metadata)
+                except json.JSONDecodeError as exc:
+                    errors.append(f"{rel_path}: `metadata` must be valid single-line JSON ({exc})")
+                else:
+                    if not isinstance(metadata_value, dict):
+                        errors.append(f"{rel_path}: `metadata` JSON must decode to an object")
+                    else:
+                        for namespace in ("clawdbot", "openclaw", "clawdis"):
+                            runtime_metadata = metadata_value.get(namespace)
+                            if runtime_metadata is None:
+                                continue
+                            if not isinstance(runtime_metadata, dict):
+                                errors.append(
+                                    f"{rel_path}: `metadata.{namespace}` must decode to an object"
+                                )
+                                continue
+                            homepage = runtime_metadata.get("homepage")
+                            if homepage is not None and not (
+                                isinstance(homepage, str)
+                                and homepage.startswith(("http://", "https://"))
+                            ):
+                                errors.append(
+                                    f"{rel_path}: `metadata.{namespace}.homepage` must be an "
+                                    "absolute http(s) URL"
+                                )
 
     if errors:
         for error in errors:
