@@ -49,10 +49,8 @@ SUMMARY_SIGNALS = (
     "no blocking issues",
     "no major issues found",
     "looks good overall",
-    "lgtm",
-    "to summarize",
-    "in summary",
 )
+SUMMARY_EXACT_MATCHES = {"lgtm", "lgtm.", "lgtm!"}
 
 QUERY = """\
 query(
@@ -190,13 +188,16 @@ def looks_like_propel_summary_comment(body: str | None) -> bool:
     if SUMMARY_HEADING_RE.match(first_line):
         return True
 
+    if normalized in SUMMARY_EXACT_MATCHES:
+        return True
+
     return any(signal in normalized for signal in SUMMARY_SIGNALS)
 
 
 def _review_is_propel_summary_like(review: dict[str, Any]) -> bool:
     body = review.get("body")
     state = str(review.get("state") or "").strip().upper()
-    if isinstance(body, str) and body.strip() == "" and state in {"APPROVED", "COMMENTED"}:
+    if (body is None or (isinstance(body, str) and body.strip() == "")) and state in {"APPROVED", "COMMENTED"}:
         return True
     return looks_like_propel_summary_comment(body if isinstance(body, str) else None)
 
@@ -259,7 +260,7 @@ def build_addressable_payload(result: dict[str, Any]) -> dict[str, Any]:
             continue
         eligible_review_threads.append(thread)
 
-    return {
+    addressable_payload = {
         "filters": {
             "skip_resolved_review_threads": True,
             "skip_summary_like_propel_comments": True,
@@ -275,6 +276,10 @@ def build_addressable_payload(result: dict[str, Any]) -> dict[str, Any]:
             "excluded": len(excluded),
         },
     }
+    pull_request = result.get("pull_request")
+    if isinstance(pull_request, dict):
+        addressable_payload["pull_request"] = pull_request
+    return addressable_payload
 
 
 def _ensure_gh_authenticated() -> None:
