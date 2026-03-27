@@ -36,6 +36,8 @@ Install from GitHub (installs all three skills: `propel-code-review`, `carl`, an
 $skill-installer propel-gtm/propel-code-skills
 ```
 
+For local plugin testing, this repo now also includes Codex plugin manifests at `plugins/propel-code-review/.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json`.
+
 ### Claude Code
 
 Run these commands in Claude Code to install all three skills (`propel-code-review`, `carl`, and `propel-address-pr-comments`):
