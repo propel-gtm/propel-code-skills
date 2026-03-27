@@ -1,0 +1,45 @@
+{
+  "name": "propel-code-review",
+  "version": "1.0.0",
+  "description": "Propel Review API skills for async diff-based code reviews and PR comment triage.",
+  "author": {
+    "name": "Propel Code",
+    "email": "support@propelcode.ai",
+    "url": "https://www.propelcode.ai"
+  },
+  "homepage": "https://docs.propelcode.ai",
+  "repository": "https://github.com/propel-gtm/propel-code-skills",
+  "license": "MIT",
+  "keywords": [
+    "propel",
+    "code-review",
+    "pull-request",
+    "github",
+    "automation",
+    "agent-skill"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Propel Code Review",
+    "shortDescription": "Run Propel reviews and address PR findings",
+    "longDescription": "Use Propel Code skills to run async diff-based reviews with the Propel Review API, fetch comment results, and address actionable pull request feedback.",
+    "developerName": "Propel Code",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://www.propelcode.ai",
+    "privacyPolicyURL": "https://www.propelcode.ai/legal/privacy",
+    "termsOfServiceURL": "https://www.propelcode.ai/legal/terms",
+    "defaultPrompt": [
+      "Review the current branch diff with Propel and summarize the findings.",
+      "Run Propel on this PR and fix the high-confidence comments.",
+      "Fetch Propel comments on the open PR and address the actionable ones."
+    ],
+    "brandColor": "#F97316",
+    "composerIcon": "./assets/logo.png",
+    "logo": "./assets/logo.png",
+    "screenshots": []
+  }
+}
