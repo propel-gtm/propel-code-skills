@@ -133,26 +133,30 @@ submit_case() {
   local token="$1"
   local repo="$2"
   local body_file
+  local curl_config_file
   body_file="$(mktemp)"
+  curl_config_file="$(mktemp)"
+  chmod 600 "$curl_config_file"
+  printf 'header = "Authorization: Bearer %s"\n' "$token" >"$curl_config_file"
+  printf 'header = "Content-Type: application/json"\n' >>"$curl_config_file"
 
   local code
   if ! code="$(
     jq -n --rawfile diff "$DIFF_FILE" --arg repo "$repo" --arg base "$BASE_COMMIT" \
       '{diff:$diff, repository:$repo, base_commit:$base}' \
       | curl -sS -o "$body_file" -w "%{http_code}" \
-        -H "Authorization: Bearer $token" \
-        -H "Content-Type: application/json" \
+        --config "$curl_config_file" \
         --data-binary @- \
         "$API_URL/v1/reviews"
   )"; then
     echo "Error: Request failed for repo '$repo' (transport-level failure)." >&2
-    rm -f "$body_file"
+    rm -f "$body_file" "$curl_config_file"
     return 1
   fi
 
   printf '%s\n' "$code"
   cat "$body_file"
-  rm -f "$body_file"
+  rm -f "$body_file" "$curl_config_file"
 }
 
 expect_code() {

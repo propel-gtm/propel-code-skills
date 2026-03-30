@@ -20,6 +20,66 @@ DUPLICATED_HELPER_GROUPS = (
             "plugins/propel-code-review/skills/propel-address-pr-comments/scripts/command_helpers.py"
         ),
     ),
+    (
+        Path("plugins/propel/skills/carl/scripts/command_helpers.py"),
+        Path("plugins/propel/skills/propel-address-pr-comments/scripts/command_helpers.py"),
+    ),
+    (
+        Path("plugins/propel-code-review/skills/carl/SKILL.md"),
+        Path("plugins/propel/skills/carl/SKILL.md"),
+    ),
+    (
+        Path("plugins/propel-code-review/skills/carl/scripts/post_carl_summary_comment.py"),
+        Path("plugins/propel/skills/carl/scripts/post_carl_summary_comment.py"),
+    ),
+    (
+        Path(
+            "plugins/propel-code-review/skills/carl/scripts/tests/test_post_carl_summary_comment.py"
+        ),
+        Path("plugins/propel/skills/carl/scripts/tests/test_post_carl_summary_comment.py"),
+    ),
+    (
+        Path("plugins/propel-code-review/skills/propel-address-pr-comments/SKILL.md"),
+        Path("plugins/propel/skills/propel-address-pr-comments/SKILL.md"),
+    ),
+    (
+        Path(
+            "plugins/propel-code-review/skills/propel-address-pr-comments/scripts/fetch_comments.py"
+        ),
+        Path("plugins/propel/skills/propel-address-pr-comments/scripts/fetch_comments.py"),
+    ),
+    (
+        Path(
+            "plugins/propel-code-review/skills/propel-address-pr-comments/scripts/tests/test_fetch_comments_filters.py"
+        ),
+        Path("plugins/propel/skills/propel-address-pr-comments/scripts/tests/test_fetch_comments_filters.py"),
+    ),
+    (
+        Path("plugins/propel-code-review/skills/propel-code-review/scripts/create_review.sh"),
+        Path("plugins/propel/skills/propel-code-review/scripts/create_review.sh"),
+    ),
+    (
+        Path("plugins/propel-code-review/skills/propel-code-review/scripts/poll_review.sh"),
+        Path("plugins/propel/skills/propel-code-review/scripts/poll_review.sh"),
+    ),
+    (
+        Path(
+            "plugins/propel-code-review/skills/propel-code-review/scripts/post_comment_feedback.sh"
+        ),
+        Path("plugins/propel/skills/propel-code-review/scripts/post_comment_feedback.sh"),
+    ),
+    (
+        Path(
+            "plugins/propel-code-review/skills/propel-code-review/scripts/smoke_test_permissions.sh"
+        ),
+        Path("plugins/propel/skills/propel-code-review/scripts/smoke_test_permissions.sh"),
+    ),
+    (
+        Path(
+            "plugins/propel-code-review/skills/propel-code-review/scripts/test_poll_status_parsing.sh"
+        ),
+        Path("plugins/propel/skills/propel-code-review/scripts/test_poll_status_parsing.sh"),
+    ),
 )
 
 
