@@ -1,14 +1,29 @@
 {
   "name": "propel-code-skills",
-  "description": "Skills for interacting with Propel Code review workflows and APIs.",
+  "description": "Propel Code skills and Claude Code plugins for async reviews, CARL loops, and PR comment triage.",
   "metadata": {
-    "description": "Skills for interacting with Propel Code review workflows and APIs.",
+    "description": "Propel Code skills and Claude Code plugins for async reviews, CARL loops, and PR comment triage.",
     "version": "1.0.0"
   },
   "owner": {
     "name": "Propel Code"
   },
   "plugins": [
+    {
+      "name": "propel",
+      "source": "./plugins/propel",
+      "description": "Propel Code slash commands for setup, review, CARL, and PR comment triage in Claude Code",
+      "version": "1.0.0",
+      "keywords": [
+        "propel",
+        "code-review",
+        "pull-request",
+        "github",
+        "automation",
+        "agent-skill"
+      ],
+      "category": "developer-tools"
+    },
     {
       "name": "propel-code-review",
       "source": "./plugins/propel-code-review",
