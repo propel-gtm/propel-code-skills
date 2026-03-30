@@ -1,0 +1,518 @@
+from __future__ import annotations
+
+import io
+import json
+import os
+from urllib.error import HTTPError
+from unittest.mock import patch
+
+import pytest
+
+from post_carl_summary_comment import (
+    MARKER,
+    ScriptError,
+    _parse_review_ids,
+    _post_pending_run_via_propel_api,
+    _post_summary_via_propel_api,
+    build_comment_body,
+    main,
+)
+
+
+class _Proc:
+    def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = ""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+class _FakeHTTPResponse:
+    def __init__(self, payload: dict[str, object]):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):  # noqa: ARG002
+        return False
+
+    def read(self) -> bytes:
+        return json.dumps(self.payload).encode("utf-8")
+
+
+def _mock_run_factory():
+    state = {"calls": []}
+
+    def _mock_run(cmd, input=None, capture_output=True, text=True, timeout=120):  # noqa: ARG001
+        state["calls"].append(cmd)
+
+        if cmd[:3] == ["gh", "auth", "status"]:
+            return _Proc(0, "", "")
+
+        if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return _Proc(0, "feature/test\n", "")
+
+        if cmd[:5] == ["gh", "repo", "view", "--json", "nameWithOwner,parent"]:
+            return _Proc(0, json.dumps({"nameWithOwner": "o/r", "parent": None}), "")
+
+        if cmd[:11] == ["gh", "pr", "list", "--repo", "o/r", "--state", "open", "--head", "o:feature/test", "--json", "number"]:
+            return _Proc(0, json.dumps([{"number": 42}]), "")
+
+        if cmd[:6] == ["gh", "pr", "view", "42", "--repo", "o/r"] and cmd[6:8] == ["--json", "number,url,title"]:
+            return _Proc(0, json.dumps({"number": 42, "url": "https://github.com/o/r/pull/42", "title": "Test PR"}), "")
+
+        raise AssertionError(f"Unhandled command: {cmd}")
+
+    return _mock_run, state
+
+
+def test_build_comment_body_contains_marker_and_fields():
+    body = build_comment_body(
+        status="COMPLETE",
+        base="main",
+        iterations=2,
+        fixed=7,
+        deferred=1,
+        remaining=0,
+        checks="passed",
+        review_ids=["r1", "r2"],
+        notes="done",
+    )
+    assert MARKER in body
+    assert "- status: `COMPLETE`" in body
+    assert "- fixed: `7`" in body
+    assert "r1, r2" in body
+
+
+def test_parse_review_ids():
+    assert _parse_review_ids("") == []
+    assert _parse_review_ids("a,b,, c ") == ["a", "b", "c"]
+
+
+def test_parse_args_rejects_non_terminal_status():
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--status",
+                "RUNNING",
+                "--iterations",
+                "1",
+                "--fixed",
+                "1",
+                "--deferred",
+                "0",
+                "--remaining",
+                "0",
+                "--checks",
+                "passed",
+            ]
+        )
+
+
+def test_parse_args_rejects_invalid_checks():
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--status",
+                "COMPLETE",
+                "--iterations",
+                "1",
+                "--fixed",
+                "1",
+                "--deferred",
+                "0",
+                "--remaining",
+                "0",
+                "--checks",
+                "maybe",
+            ]
+        )
+
+
+def test_main_complete_requires_zero_remaining():
+    rc = main(
+        [
+            "--status",
+            "COMPLETE",
+            "--iterations",
+            "1",
+            "--fixed",
+            "1",
+            "--deferred",
+            "0",
+            "--remaining",
+            "1",
+            "--checks",
+            "passed",
+        ]
+    )
+    assert rc == 1
+
+
+def test_main_non_complete_requires_non_zero_remaining():
+    rc = main(
+        [
+            "--status",
+            "BLOCKED",
+            "--iterations",
+            "3",
+            "--fixed",
+            "1",
+            "--deferred",
+            "1",
+            "--remaining",
+            "0",
+            "--checks",
+            "failed",
+        ]
+    )
+    assert rc == 1
+
+
+def test_main_non_complete_rejects_negative_remaining():
+    rc = main(
+        [
+            "--status",
+            "MAX_ITERATIONS_REACHED",
+            "--iterations",
+            "3",
+            "--fixed",
+            "1",
+            "--deferred",
+            "1",
+            "--remaining",
+            "-1",
+            "--checks",
+            "failed",
+        ]
+    )
+    assert rc == 1
+
+
+@patch("subprocess.run")
+def test_main_dry_run(mock_run):
+    runner, state = _mock_run_factory()
+    mock_run.side_effect = runner
+
+    with patch.dict(os.environ, {"PROPEL_API_BASE_URL": "https://api.test.example"}):
+        with patch("post_carl_summary_comment._post_summary_via_propel_api") as mock_post:
+            rc = main(
+                [
+                    "--status",
+                    "COMPLETE",
+                    "--iterations",
+                    "2",
+                    "--fixed",
+                    "7",
+                    "--deferred",
+                    "0",
+                    "--remaining",
+                    "0",
+                    "--checks",
+                    "passed",
+                    "--review-ids",
+                    "a,b",
+                    "--dry-run",
+                ]
+            )
+
+    assert rc == 0
+    assert any(cmd[:3] == ["gh", "auth", "status"] for cmd in state["calls"])
+    mock_post.assert_not_called()
+
+
+@patch("subprocess.run")
+def test_main_create_comment_via_propel_api(mock_run):
+    runner, _ = _mock_run_factory()
+    mock_run.side_effect = runner
+
+    with patch.dict(os.environ, {"PROPEL_API_KEY": "rev_test_key"}):
+        with patch(
+            "post_carl_summary_comment._post_summary_via_propel_api",
+            return_value={"action": "created", "comment_id": "1001", "url": "https://github.com/o/r/pull/42#issuecomment-1001"},
+        ) as mock_post:
+            rc = main(
+                [
+                    "--status",
+                    "BLOCKED",
+                    "--iterations",
+                    "1",
+                    "--fixed",
+                    "0",
+                    "--deferred",
+                    "1",
+                    "--remaining",
+                    "1",
+                    "--checks",
+                    "failed",
+                ]
+            )
+
+    assert rc == 0
+    assert mock_post.call_count == 1
+
+
+@patch("subprocess.run")
+def test_main_update_comment_via_propel_api(mock_run):
+    runner, _ = _mock_run_factory()
+    mock_run.side_effect = runner
+
+    with patch.dict(os.environ, {"PROPEL_API_KEY": "rev_test_key"}):
+        with patch(
+            "post_carl_summary_comment._post_summary_via_propel_api",
+            return_value={"action": "updated", "comment_id": "77", "url": "https://github.com/o/r/pull/42#issuecomment-77"},
+        ) as mock_post:
+            rc = main(
+                [
+                    "--status",
+                    "MAX_ITERATIONS_REACHED",
+                    "--iterations",
+                    "6",
+                    "--fixed",
+                    "4",
+                    "--deferred",
+                    "2",
+                    "--remaining",
+                    "3",
+                    "--checks",
+                    "passed",
+                ]
+            )
+
+    assert rc == 0
+    assert mock_post.call_count == 1
+
+
+@patch("subprocess.run")
+def test_main_returns_error_code_on_gh_failure(mock_run):
+    mock_run.return_value = _Proc(1, "", "gh auth failed")
+    rc = main(
+        [
+            "--status",
+            "COMPLETE",
+            "--iterations",
+            "1",
+            "--fixed",
+            "1",
+            "--deferred",
+            "0",
+            "--remaining",
+            "0",
+            "--checks",
+            "passed",
+        ]
+    )
+    assert rc == 1
+
+
+@patch("post_carl_summary_comment._post_pending_run_via_propel_api", return_value={"run_id": 101})
+@patch("subprocess.run")
+def test_main_no_open_pr_persists_pending_run(mock_run, mock_pending_run):
+    state = {"calls": []}
+
+    def runner(cmd, input=None, capture_output=True, text=True, timeout=120):  # noqa: ARG001
+        state["calls"].append(cmd)
+        if cmd[:3] == ["gh", "auth", "status"]:
+            return _Proc(0, "", "")
+        if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return _Proc(0, "feature/no-pr\n", "")
+        if cmd[:5] == ["gh", "repo", "view", "--json", "nameWithOwner,parent"]:
+            return _Proc(
+                0,
+                json.dumps(
+                    {"nameWithOwner": "fork-owner/fork-repo", "parent": {"nameWithOwner": "base/repo"}}
+                ),
+                "",
+            )
+        if cmd[:11] == ["gh", "pr", "list", "--repo", "base/repo", "--state", "open", "--head", "fork-owner:feature/no-pr", "--json", "number"]:
+            return _Proc(0, json.dumps([]), "")
+        if cmd[:11] == ["gh", "pr", "list", "--repo", "base/repo", "--state", "open", "--head", "feature/no-pr", "--json", "number"]:
+            return _Proc(0, json.dumps([]), "")
+        if cmd[:3] == ["git", "rev-parse", "HEAD"]:
+            return _Proc(0, "abc123def456\n", "")
+        raise AssertionError(f"Unhandled command: {cmd}")
+
+    mock_run.side_effect = runner
+    with patch.dict(os.environ, {"PROPEL_API_KEY": "rev_test_key"}):
+        rc = main(
+            [
+                "--status",
+                "COMPLETE",
+                "--iterations",
+                "1",
+                "--fixed",
+                "1",
+                "--deferred",
+                "0",
+                "--remaining",
+                "0",
+                "--checks",
+                "passed",
+            ]
+        )
+    assert rc == 0
+    assert mock_pending_run.call_count == 1
+    assert mock_pending_run.call_args.kwargs["repository"] == "base/repo"
+    assert mock_pending_run.call_args.kwargs["head_commit_sha"] == "abc123def456"
+
+
+@patch("subprocess.run")
+def test_main_missing_propel_api_key_returns_error(mock_run):
+    runner, _ = _mock_run_factory()
+    mock_run.side_effect = runner
+
+    with patch.dict(os.environ, {}, clear=True):
+        rc = main(
+            [
+                "--status",
+                "COMPLETE",
+                "--iterations",
+                "1",
+                "--fixed",
+                "1",
+                "--deferred",
+                "0",
+                "--remaining",
+                "0",
+                "--checks",
+                "passed",
+            ]
+        )
+    assert rc == 1
+
+
+def test_post_summary_via_propel_api_success():
+    with patch(
+        "post_carl_summary_comment.urlrequest.urlopen",
+        return_value=_FakeHTTPResponse({"action": "created", "comment_id": "1001", "url": "https://example.com/comment/1001"}),
+    ) as mock_urlopen:
+        result = _post_summary_via_propel_api(
+            api_base_url="https://api.propelcode.ai",
+            api_key="rev_test",
+            repository="owner/repo",
+            pr_number=42,
+            body=f"{MARKER}\nhello",
+        )
+
+    assert result["action"] == "created"
+    request_obj = mock_urlopen.call_args.args[0]
+    assert request_obj.full_url == "https://api.propelcode.ai/v1/reviews/pr-comments/upsert"
+    assert request_obj.get_method() == "POST"
+
+    payload = json.loads(request_obj.data.decode("utf-8"))
+    assert payload["repository"] == "owner/repo"
+    assert payload["pr_number"] == 42
+    assert payload["marker"] == MARKER
+
+
+def test_post_pending_run_via_propel_api_success():
+    with patch(
+        "post_carl_summary_comment.urlrequest.urlopen",
+        return_value=_FakeHTTPResponse({"run_id": 101, "status": "COMPLETE"}),
+    ) as mock_urlopen:
+        result = _post_pending_run_via_propel_api(
+            api_base_url="https://api.propelcode.ai",
+            api_key="rev_test",
+            repository="owner/repo",
+            branch="feature/test",
+            head_commit_sha="abc123",
+            status="COMPLETE",
+            base="main",
+            iterations=1,
+            fixed=1,
+            deferred=0,
+            remaining=0,
+            checks="passed",
+            review_ids=["r1"],
+            notes="done",
+            marker=MARKER,
+            body=f"{MARKER}\nhello",
+        )
+
+    assert result["run_id"] == 101
+    request_obj = mock_urlopen.call_args.args[0]
+    assert request_obj.full_url == "https://api.propelcode.ai/v1/reviews/carl-runs"
+    assert request_obj.get_method() == "POST"
+
+    payload = json.loads(request_obj.data.decode("utf-8"))
+    assert payload["repository"] == "owner/repo"
+    assert payload["branch"] == "feature/test"
+    assert payload["head_commit_sha"] == "abc123"
+    assert payload["status"] == "COMPLETE"
+
+
+@patch("subprocess.run")
+def test_main_derives_repo_from_pr_url(mock_run):
+    state = {"calls": []}
+
+    def runner(cmd, input=None, capture_output=True, text=True, timeout=120):  # noqa: ARG001
+        state["calls"].append(cmd)
+        if cmd[:3] == ["gh", "auth", "status"]:
+            return _Proc(0, "", "")
+        if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return _Proc(0, "feature/cross-repo\n", "")
+        if cmd[:5] == ["gh", "repo", "view", "--json", "nameWithOwner,parent"]:
+            return _Proc(
+                0,
+                json.dumps(
+                    {"nameWithOwner": "fork/repo", "parent": {"nameWithOwner": "base/repo"}}
+                ),
+                "",
+            )
+        if cmd[:11] == ["gh", "pr", "list", "--repo", "base/repo", "--state", "open", "--head", "fork:feature/cross-repo", "--json", "number"]:
+            return _Proc(0, json.dumps([{"number": 42}]), "")
+        if cmd[:6] == ["gh", "pr", "view", "42", "--repo", "base/repo"] and cmd[6:8] == ["--json", "number,url,title"]:
+            return _Proc(0, json.dumps({"number": 42, "url": "https://github.com/base/repo/pull/42", "title": "Cross-repo PR"}), "")
+        raise AssertionError(f"Unhandled command: {cmd}")
+
+    mock_run.side_effect = runner
+
+    with patch.dict(os.environ, {"PROPEL_API_KEY": "rev_test_key"}):
+        with patch(
+            "post_carl_summary_comment._post_summary_via_propel_api",
+            return_value={"action": "created", "comment_id": "1001"},
+        ) as mock_post:
+            rc = main(
+                [
+                    "--status",
+                    "BLOCKED",
+                    "--iterations",
+                    "1",
+                    "--fixed",
+                    "0",
+                    "--deferred",
+                    "1",
+                    "--remaining",
+                    "1",
+                    "--checks",
+                    "failed",
+                ]
+            )
+
+    assert rc == 0
+    assert mock_post.call_count == 1
+    assert mock_post.call_args.kwargs["repository"] == "base/repo"
+
+
+def test_post_summary_via_propel_api_http_error():
+    err = HTTPError(
+        url="https://api.propelcode.ai/v1/reviews/pr-comments/upsert",
+        code=404,
+        msg="Not Found",
+        hdrs=None,
+        fp=io.BytesIO(b'{"error":"Repository not found"}'),
+    )
+
+    with patch("post_carl_summary_comment.urlrequest.urlopen", side_effect=err):
+        with pytest.raises(ScriptError, match="Propel API request failed \\(404\\)"):
+            _post_summary_via_propel_api(
+                api_base_url="https://api.propelcode.ai",
+                api_key="rev_test",
+                repository="missing/repo",
+                pr_number=42,
+                body=f"{MARKER}\nhello",
+            )
+
+
+def test_script_error_str():
+    assert str(ScriptError("x")) == "x"

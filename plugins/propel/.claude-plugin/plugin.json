@@ -1,0 +1,21 @@
+{
+  "name": "propel",
+  "author": {
+    "name": "Propel Code"
+  },
+  "description": "Propel Code slash commands and bundled skills for setup, async code review, CARL, and PR comment triage",
+  "version": "1.0.0",
+  "skills": [
+    "./skills/propel-code-review",
+    "./skills/carl",
+    "./skills/propel-address-pr-comments"
+  ],
+  "keywords": [
+    "propel",
+    "code-review",
+    "pull-request",
+    "github",
+    "automation",
+    "agent-skill"
+  ]
+}

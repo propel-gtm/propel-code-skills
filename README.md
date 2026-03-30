@@ -2,8 +2,9 @@
 
 Official docs: [Skills](https://docs.propelcode.ai/features/skills)
 
-This repo ships these skills:
+This repo ships:
 
+- `propel`: a Claude Code plugin with slash commands for setup, async review, CARL, and PR comment triage.
 - `propel-code-review`: Run async diff-based code reviews with the Propel Review API.
 - `carl`: Run a continuous review/fix loop until Propel comments are cleared.
 - `propel-address-pr-comments`: Fetch and address Propel AI comments on the open PR for the current branch.
@@ -38,12 +39,29 @@ $skill-installer propel-gtm/propel-code-skills
 
 ### Claude Code
 
-Run these commands in Claude Code to install all three skills (`propel-code-review`, `carl`, and `propel-address-pr-comments`):
+Recommended install:
 
 ```text
 /plugin marketplace add propel-gtm/propel-code-skills
+/plugin install propel@propel-code-skills
+/reload-plugins
+/propel:setup
+```
+
+This installs a short-name Claude Code plugin with:
+
+- `/propel:setup`
+- `/propel:review`
+- `/propel:carl`
+- `/propel:address-pr-comments`
+
+Legacy install:
+
+```text
 /plugin install propel-code-review@propel-code-skills
 ```
+
+The legacy `propel-code-review` plugin remains available for compatibility, but `propel` is the recommended Claude Code install going forward.
 
 ### Cursor
 
