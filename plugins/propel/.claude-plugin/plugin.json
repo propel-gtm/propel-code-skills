@@ -3,7 +3,7 @@
   "author": {
     "name": "Propel Code"
   },
-  "description": "Propel Code slash commands and bundled skills for setup, async code review, CARL, and PR comment triage",
+  "description": "Propel Code slash commands for setup, review, CARL, and PR comment triage in Claude Code",
   "version": "1.0.0",
   "skills": [
     "./skills/propel-code-review",
