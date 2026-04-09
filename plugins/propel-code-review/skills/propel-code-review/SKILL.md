@@ -270,11 +270,11 @@ fi
 
 scripts/poll_review.sh \
   --review-id "$REVIEW_ID" \
-  --max-attempts 30 \
-  --sleep-seconds 30 \
+  --max-attempts 45 \
+  --sleep-seconds 20 \
   --output-file /tmp/review_api.result.json
 
-# The poller uses the 30x30s budget above, but will follow API-provided
+# The poller uses the 45x20s budget above, but will follow API-provided
 # poll_after_ms hints when the server returns them.
 
 cat /tmp/review_api.result.json
